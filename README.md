@@ -217,4 +217,4 @@ more than one dialect.
 
 ## License
 
-See [LICENSE](LICENSE).
+See [LICENSE](LICENSE.txt).
