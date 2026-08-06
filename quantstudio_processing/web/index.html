@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QuantStudio_Processing</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+
+<header class="bar">
+  <div class="wordmark">QuantStudio<span>_</span>Processing</div>
+
+  <div class="bar-file" id="fileChip" hidden>
+    <span class="chip-name" id="chipName"></span>
+    <span class="chip-meta" id="chipMeta"></span>
+  </div>
+
+  <div class="bar-actions">
+    <button class="btn" id="btnYaml" disabled>Copy platemap</button>
+    <button class="btn" id="btnDownload" disabled>Download workbook</button>
+    <button class="btn btn-primary reserve" id="btnRun" disabled
+            data-states="Run analysis|Running|Run again">
+      <span class="btn-label" id="runLabel">Run analysis</span>
+      <span class="spinner" id="runSpin" hidden aria-hidden="true"></span>
+    </button>
+  </div>
+</header>
+
+<main class="shell">
+
+  <!-- ---------------------------------------------------------- plate --- -->
+  <section class="stage" aria-label="Plate">
+    <div class="drop" id="drop">
+      <div class="drop-inner">
+        <p class="drop-head">Drop a QuantStudio export here</p>
+        <p class="drop-sub">.xlsx from Design &amp; Analysis, 7500 or StepOne software</p>
+        <label class="btn btn-quiet">
+          Choose a file<input type="file" id="fileInput" accept=".xlsx,.xls" hidden>
+        </label>
+      </div>
+    </div>
+
+    <div class="plate-wrap" id="plateWrap" hidden>
+      <div class="plate-head">
+        <div class="seg" role="group" aria-label="Plate format">
+          <button class="seg-btn" data-format="96">96</button>
+          <button class="seg-btn" data-format="384">384</button>
+        </div>
+        <span class="hint" id="plateHint"></span>
+        <div class="plate-head-right">
+          <button class="btn btn-quiet" id="btnFromFile">Fill from file</button>
+          <button class="btn btn-quiet hold" id="btnClear">
+            <span class="hold-fill" aria-hidden="true"></span>
+            <span class="btn-label">Hold to clear plate</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="plate" id="plate"></div>
+
+      <div class="plate-foot">
+        <p class="status" id="plateStatus" role="status"></p>
+        <p class="legend-note">Fill is the assignment · hatching is a QC flag · — is Undetermined</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- ----------------------------------------------------------- rail --- -->
+  <aside class="rail" aria-label="Plate design">
+    <div class="rail-block">
+      <div class="rail-head">
+        <h2>Fields</h2>
+        <button class="btn btn-mini" id="btnAddField">New field</button>
+      </div>
+      <div class="tabs" id="fieldTabs"></div>
+      <p class="rail-note" id="fieldNote">A field is one column of the results table — the primer set, the template, the input copies. Paint wells to fill it.</p>
+    </div>
+
+    <div class="rail-block grow">
+      <div class="rail-head">
+        <h2>Values</h2>
+        <button class="btn btn-mini" id="btnAddValue">New value</button>
+      </div>
+      <div class="values" id="values"></div>
+      <p class="rail-note">Pick a value, then drag across the plate. Row and column headers paint the whole line. Alt-drag erases.</p>
+    </div>
+
+    <div class="rail-block">
+      <h2>Analysis</h2>
+      <label class="field">
+        <span>Assay field</span>
+        <select id="selAssay"></select>
+      </label>
+      <label class="field">
+        <span>Replicate keys</span>
+        <select id="selGroup" multiple size="3"></select>
+      </label>
+      <label class="field">
+        <span>Input copies field</span>
+        <select id="selQuantity"></select>
+      </label>
+      <div class="field-row">
+        <label class="field">
+          <span>ΔCt target</span>
+          <select id="selDctA"></select>
+        </label>
+        <label class="field">
+          <span>reference</span>
+          <select id="selDctB"></select>
+        </label>
+      </div>
+      <details class="thresholds">
+        <summary>QC thresholds</summary>
+        <div class="field-row">
+          <label class="field"><span>NTC margin</span>
+            <input type="number" id="optNtc" value="3" step="0.5" min="0"></label>
+          <label class="field"><span>Max Ct SD</span>
+            <input type="number" id="optSd" value="0.5" step="0.1" min="0"></label>
+          <label class="field"><span>Min Ct</span>
+            <input type="number" id="optCtMin" value="10" step="1" min="0"></label>
+        </div>
+      </details>
+    </div>
+  </aside>
+
+  <!-- -------------------------------------------------------- results --- -->
+  <section class="results" id="results" aria-label="Results">
+    <div class="tabs tabs-result" id="resultTabs"></div>
+    <div class="result-body" id="resultBody">
+      <p class="empty">Results appear here once you run the analysis.</p>
+    </div>
+  </section>
+</main>
+
+<!-- well inspector, opens from wherever it was triggered -->
+<div class="pop" id="pop" hidden role="dialog" aria-label="Well detail"></div>
+
+<div class="toaster" id="toaster" aria-live="polite"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
