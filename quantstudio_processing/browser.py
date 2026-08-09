@@ -34,6 +34,7 @@ class BrowserSession:
         self.bundle: dict | None = None
         self.tables: dict | None = None
         self.plots: dict[str, bytes] = {}
+        self.svg_plots: dict[str, bytes] = {}
         self.plots_archive: bytes | None = None
         self.filename: str | None = None
 
@@ -41,6 +42,7 @@ class BrowserSession:
         self.bundle = None
         self.tables = None
         self.plots = {}
+        self.svg_plots = {}
         self.plots_archive = None
         self.filename = None
         plt = sys.modules.get("matplotlib.pyplot")
@@ -69,6 +71,7 @@ class BrowserSession:
     def analyze_json(self, request_json: str) -> str:
         self.tables = None
         self.plots = {}
+        self.svg_plots = {}
         self.plots_archive = None
         if self.bundle is None:
             return _json_envelope(error="Load a workbook before running the analysis.")
@@ -76,11 +79,14 @@ class BrowserSession:
             body = json.loads(request_json)
             if not isinstance(body, dict):
                 raise webcore.UserError("The analysis request must be a JSON object.")
-            tables, plots, payload = webcore.analyze_bundle(self.bundle, body)
+            tables, plots, svg_plots, payload = webcore.analyze_bundle(
+                self.bundle, body
+            )
         except (json.JSONDecodeError, webcore.UserError) as exc:
             return _json_envelope(error=str(exc))
         self.tables = tables
         self.plots = plots
+        self.svg_plots = svg_plots
         return _json_envelope(data=payload)
 
     def take_plot(self, name: str) -> bytes:
@@ -95,6 +101,15 @@ class BrowserSession:
             return self.plots[name]
         except KeyError as exc:
             raise webcore.UserError(f"Plot {name!r} is no longer available.") from exc
+
+    def plot_svg_bytes(self, name: str) -> bytes:
+        """Return the true vector export matching a displayed PNG plot."""
+        try:
+            return self.svg_plots[name]
+        except KeyError as exc:
+            raise webcore.UserError(
+                f"SVG plot {name!r} is no longer available."
+            ) from exc
 
     def plots_zip_bytes(self) -> bytes:
         """Package the current PNG plots into one safe, reusable ZIP archive."""
@@ -165,6 +180,10 @@ def take_plot(name: str) -> bytes:
 
 def plot_bytes(name: str) -> bytes:
     return _SESSION.plot_bytes(name)
+
+
+def plot_svg_bytes(name: str) -> bytes:
+    return _SESSION.plot_svg_bytes(name)
 
 
 def plots_zip_bytes() -> bytes:

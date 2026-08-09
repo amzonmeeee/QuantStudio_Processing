@@ -6,6 +6,7 @@ import json
 import subprocess
 import sys
 import zipfile
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 import numpy as np
@@ -41,6 +42,16 @@ def _decode_envelope(raw):
     return json.loads(raw, parse_constant=lambda value: pytest.fail(value))
 
 
+def _assert_true_vector_svg(data):
+    root = ET.fromstring(data)
+    assert root.tag == "{http://www.w3.org/2000/svg}svg"
+    lowered = data.lower()
+    assert b"<image" not in lowered
+    assert b"data:image" not in lowered
+    vector_tags = {"path", "rect", "polygon", "polyline", "line", "circle"}
+    assert any(element.tag.rsplit("}", 1)[-1] in vector_tags for element in root.iter())
+
+
 def test_static_frontend_uses_the_local_worker_instead_of_http_apis():
     web = Path(__file__).resolve().parents[1] / "quantstudio_processing" / "web"
     app_source = (web / "app.js").read_text()
@@ -50,10 +61,15 @@ def test_static_frontend_uses_the_local_worker_instead_of_http_apis():
     assert "fetch(" not in app_source
     assert "new Worker" in (web / "pyodide-client.js").read_text()
     assert "curvesZip()" in (web / "pyodide-client.js").read_text()
+    assert "plotSvg(name)" in (web / "pyodide-client.js").read_text()
     assert "browserApi.plots_zip_bytes()" in worker_source
     assert "browserApi.plot_bytes(name)" in worker_source
+    assert "browserApi.plot_svg_bytes(payload.name)" in worker_source
     assert "Download all PNGs" in app_source
     assert "Download PNG" in app_source
+    assert "Download SVG" in app_source
+    assert "image/svg+xml;charset=utf-8" in app_source
+    assert "plot-actions" in app_source
     assert "el('figure'" in app_source
     for module in (
         "analysis.py",
@@ -143,6 +159,7 @@ def test_browser_session_analyzes_and_exports_a_workbook(synth_workbook):
     assert failed["ok"] is False
     assert "not_on_the_plate" in failed["error"]
     assert session.tables is None
+    assert session.svg_plots == {}
     with pytest.raises(webcore.UserError, match="before downloading"):
         session.workbook_bytes()
 
@@ -161,8 +178,13 @@ def test_browser_session_errors_reset_state_and_plots():
     session.bundle = {"stale": True}
     session.tables = {"stale": pd.DataFrame()}
     session.plots = {"plate": b"png", "melt": b"melt"}
+    session.svg_plots = {"plate": b"<svg>plate</svg>"}
     session.filename = "stale.xlsx"
 
+    assert session.plot_svg_bytes("plate") == b"<svg>plate</svg>"
+    assert session.plot_svg_bytes("plate") == b"<svg>plate</svg>"
+    with pytest.raises(webcore.UserError, match="SVG plot"):
+        session.plot_svg_bytes("melt")
     assert session.plot_bytes("plate") == b"png"
     assert session.plot_bytes("plate") == b"png"
     assert session.take_plot("plate") == b"png"
@@ -175,13 +197,64 @@ def test_browser_session_errors_reset_state_and_plots():
     assert session.bundle is None
     assert session.tables is None
     assert session.plots == {}
+    assert session.svg_plots == {}
     assert session.filename is None
 
     session.reset()
     assert session.bundle is None
     assert session.tables is None
     assert session.plots == {}
+    assert session.svg_plots == {}
     assert session.filename is None
+
+
+def test_browser_exports_true_vector_svg_and_keeps_it_after_png_zip(
+    synth_workbook,
+):
+    session = BrowserSession()
+    loaded = _decode_envelope(
+        session.load_bytes(synth_workbook.read_bytes(), "synthetic_384.xlsx")
+    )
+    assert loaded["ok"] is True
+
+    analyzed = _decode_envelope(
+        session.analyze_json(
+            json.dumps(
+                {
+                    "fields": {},
+                    "assay_col": "target",
+                    "group_cols": ["target", "sample"],
+                    "quantity_col": None,
+                }
+            )
+        )
+    )
+    assert analyzed["ok"] is True
+    assert set(analyzed["data"]["plots"]) == {"amplification", "plate"}
+
+    svg_exports = {}
+    for name in analyzed["data"]["plots"]:
+        png = session.plot_bytes(name)
+        assert png.startswith(b"\x89PNG\r\n\x1a\n")
+        svg = session.plot_svg_bytes(name)
+        assert session.plot_svg_bytes(name) is svg
+        _assert_true_vector_svg(svg)
+        svg_exports[name] = svg
+
+    archive_bytes = session.plots_zip_bytes()
+    with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
+        assert archive.namelist() == [
+            "synthetic_384_amplification.png",
+            "synthetic_384_plate_ct.png",
+        ]
+        assert all(
+            archive.read(name).startswith(b"\x89PNG")
+            for name in archive.namelist()
+        )
+
+    assert session.plots == {}
+    for name, svg in svg_exports.items():
+        assert session.plot_svg_bytes(name) is svg
 
 
 def test_browser_packages_all_curve_images_into_a_reusable_zip():

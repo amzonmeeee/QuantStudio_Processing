@@ -174,7 +174,7 @@ function updateRuntimeStatus(status) {
   const canRetry = runtimeState === 'error' && status.recoverable !== false;
   $('#btnRuntimeRetry').hidden = !canRetry;
   $('#btnPlateRetry').hidden = !canRetry || !state.loaded;
-  $$('.plots-download-all').forEach(button => {
+  $$('.plots-download-all, .plot-download-svg').forEach(button => {
     button.disabled = runtimeState !== 'ready';
   });
 
@@ -185,6 +185,11 @@ function updateRuntimeStatus(status) {
     if (state.loaded) setStatus('The local analyzer stopped. Retry to reload this workbook.');
   } else if (runtimeState === 'loading' && state.loaded) {
     setStatus(status.message);
+  } else if (runtimeState === 'ready' && state.results) {
+    setStatus(
+      `${state.results.n_wells} wells analysed. `
+      + `${state.results.n_flagged} carry a QC flag.`,
+    );
   }
 }
 
@@ -835,7 +840,7 @@ function renderResults() {
       };
       const toolbar = el('div', {
         class: 'plots-toolbar',
-        textContent: 'PNG images generated locally in this browser.',
+        textContent: 'PNG previews and vector SVG exports are generated locally.',
       });
       toolbar.append(downloadAll);
       wrap.append(toolbar);
@@ -844,16 +849,19 @@ function renderResults() {
     for (const [name, src] of plotEntries) {
       const meta = plotMeta(name);
       const heading = el('span', { class: 'plot-name', textContent: meta.label });
-      const download = el('button', {
-        class: 'btn plot-download',
+      const downloadPng = el('button', {
+        class: 'btn plot-download-png',
         textContent: 'Download PNG',
       });
-      download.type = 'button';
-      download.setAttribute('aria-label', `Download ${meta.label.toLowerCase()} as PNG`);
-      download.onclick = () => {
+      downloadPng.type = 'button';
+      downloadPng.setAttribute(
+        'aria-label',
+        `Download ${meta.label.toLowerCase()} as PNG`,
+      );
+      downloadPng.onclick = () => {
         const blob = state.plotBlobs.get(name);
         if (!blob) {
-          toast('That curve image is no longer available. Run the analysis again.', {
+          toast('That PNG is no longer available. Run the analysis again.', {
             tone: 'error',
           });
           return;
@@ -863,8 +871,53 @@ function renderResults() {
           downloadName(state.filename, `_${meta.suffix}`, 'png'),
         );
       };
+
+      const svgLabel = el('span', {
+        class: 'btn-label',
+        textContent: 'Download SVG',
+      });
+      const svgSpinner = el('span', {
+        class: 'spinner spinner-dark',
+        hidden: true,
+      });
+      svgSpinner.setAttribute('aria-hidden', 'true');
+      const downloadSvg = el('button', {
+        class: 'btn reserve plot-download-svg',
+        dataset: { states: 'Download SVG|Preparing SVG' },
+      });
+      downloadSvg.type = 'button';
+      downloadSvg.disabled = !state.runtimeReady;
+      downloadSvg.setAttribute(
+        'aria-label',
+        `Download ${meta.label.toLowerCase()} as SVG`,
+      );
+      downloadSvg.append(svgLabel, svgSpinner);
+      downloadSvg.onclick = () => {
+        void withPending(
+          downloadSvg, svgLabel, svgSpinner,
+          'Preparing SVG', 'Download SVG',
+          async () => {
+            const bytes = await localBackend.plotSvg(name);
+            downloadBlob(
+              new Blob([bytes], { type: 'image/svg+xml;charset=utf-8' }),
+              downloadName(state.filename, `_${meta.suffix}`, 'svg'),
+            );
+            toast('Vector SVG created locally.');
+          },
+          () => Boolean(state.results?.plots?.[name]) && state.runtimeReady,
+        ).catch(error => {
+          toast(messageFor(error, 'Could not create that SVG.'), {
+            tone: 'error', timeout: 8000,
+          });
+        });
+      };
+
+      const actions = el('span', { class: 'plot-actions' });
+      actions.setAttribute('role', 'group');
+      actions.setAttribute('aria-label', `Download ${meta.label.toLowerCase()}`);
+      actions.append(downloadPng, downloadSvg);
       const caption = el('figcaption', { class: 'plot-head' });
-      caption.append(heading, download);
+      caption.append(heading, actions);
       const figure = el('figure', { class: 'plot' });
       figure.append(
         caption,
@@ -878,6 +931,7 @@ function renderResults() {
     body.append(wrap);
     const allButton = $('.plots-download-all', wrap);
     if (allButton) reserveWidth(allButton);
+    $$('.plot-download-svg', wrap).forEach(reserveWidth);
   } else {
     body.append(table(d.tables[state.activeResultTab]));
   }

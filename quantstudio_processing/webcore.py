@@ -100,13 +100,16 @@ def _platemap_frame(fields: dict) -> pd.DataFrame:
     return out.reset_index()
 
 
-def _fig_png(fig) -> bytes | None:
+def _fig_exports(fig) -> tuple[bytes, bytes] | None:
+    """Encode one live Figure as matching PNG and SVG files, then close it."""
     if fig is None:
         return None
-    buf = _io.BytesIO()
+    png = _io.BytesIO()
+    svg = _io.BytesIO()
     try:
-        fig.savefig(buf, format="png", dpi=140, bbox_inches="tight")
-        return buf.getvalue()
+        fig.savefig(png, format="png", dpi=140, bbox_inches="tight")
+        fig.savefig(svg, format="svg", bbox_inches="tight")
+        return png.getvalue(), svg.getvalue()
     finally:
         import matplotlib.pyplot as plt
 
@@ -152,8 +155,10 @@ def _nonnegative_option(options: dict, key: str, default: float) -> float:
     return value
 
 
-def analyze_bundle(bundle: dict, body: dict) -> tuple[dict, dict[str, bytes], dict]:
-    """Run QC/summary/plotting and return tables, PNG bytes and UI payload."""
+def analyze_bundle(
+    bundle: dict, body: dict
+) -> tuple[dict, dict[str, bytes], dict[str, bytes], dict]:
+    """Run analysis and return tables, matching PNG/SVG plots and UI payload."""
     design = _platemap_frame(body.get("fields") or {})
     assay = body.get("assay_col") or "target"
     group_cols = [c for c in (body.get("group_cols") or []) if c]
@@ -222,6 +227,7 @@ def analyze_bundle(bundle: dict, body: dict) -> tuple[dict, dict[str, bytes], di
             raise UserError(str(exc).strip("'")) from exc
 
     plot_bytes: dict[str, bytes] = {}
+    svg_plot_bytes: dict[str, bytes] = {}
     if not body.get("skip_plots"):
         # Lazy import keeps Matplotlib out of the initial workbook-load path in
         # Pyodide.  The worker loads the package immediately before this call.
@@ -236,7 +242,7 @@ def analyze_bundle(bundle: dict, body: dict) -> tuple[dict, dict[str, bytes], di
         title = str(bundle["meta"].get("Experiment Name", ""))
         for kind, key in (("amplification", "amplification"), ("melt", "melt")):
             if bundle[key] is not None:
-                png = _fig_png(
+                exports = _fig_exports(
                     plot.curves(
                         wells,
                         bundle[key],
@@ -247,11 +253,11 @@ def analyze_bundle(bundle: dict, body: dict) -> tuple[dict, dict[str, bytes], di
                         title=title,
                     )
                 )
-                if png:
-                    plot_bytes[kind] = png
-        png = _fig_png(plot.plate_heatmap(wells, "ct"))
-        if png:
-            plot_bytes["plate"] = png
+                if exports:
+                    plot_bytes[kind], svg_plot_bytes[kind] = exports
+        exports = _fig_exports(plot.plate_heatmap(wells, "ct"))
+        if exports:
+            plot_bytes["plate"], svg_plot_bytes["plate"] = exports
 
     flagged = wells[~wells["qc_pass"]]
     payload = {
@@ -261,7 +267,7 @@ def analyze_bundle(bundle: dict, body: dict) -> tuple[dict, dict[str, bytes], di
         "n_flagged": int(len(flagged)),
         "n_wells": int(len(wells)),
     }
-    return tables, plot_bytes, payload
+    return tables, plot_bytes, svg_plot_bytes, payload
 
 
 def workbook_bytes(tables: dict[str, pd.DataFrame]) -> bytes:

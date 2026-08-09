@@ -500,6 +500,13 @@ td.flagcell { color: var(--flag); }
 }
 .plot-head { margin-bottom: 7px; }
 .plot-name { font-size: 12px; font-weight: 600; }
+.plot-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 6px;
+}
 .plot img {
   display: block;
   max-width: 100%;
@@ -592,8 +599,17 @@ td.flagcell { color: var(--flag); }
     align-items: stretch;
     flex-direction: column;
   }
-  .plots-toolbar .btn,
-  .plot-head .btn {
+  .plots-toolbar .btn {
     align-self: flex-start;
+    min-height: 44px;
+  }
+  .plot-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+  .plot-actions .btn {
+    width: 100%;
+    min-height: 44px;
   }
 }

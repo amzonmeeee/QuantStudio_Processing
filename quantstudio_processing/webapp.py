@@ -84,7 +84,9 @@ def analyze():
         return jsonify(error="This file is no longer loaded. Load it again."), 400
 
     try:
-        tables, plots, payload = webcore.analyze_bundle(session["bundle"], body)
+        tables, plots, _svg_plots, payload = webcore.analyze_bundle(
+            session["bundle"], body
+        )
     except webcore.UserError as exc:
         return jsonify(error=str(exc)), 400
 

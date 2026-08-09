@@ -139,6 +139,10 @@ export const localBackend = {
     return request('curves-zip');
   },
 
+  plotSvg(name) {
+    return request('plot-svg', { name });
+  },
+
   platemapYaml(options) {
     return request('platemap-yaml', options);
   },

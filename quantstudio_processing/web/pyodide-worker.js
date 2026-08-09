@@ -173,6 +173,12 @@ async function perform(message) {
       value = bytes.buffer;
       transfer.push(bytes.buffer);
       status('ready', 'Curve images ready to download.', 'ready');
+    } else if (op === 'plot-svg') {
+      status('export', 'Preparing the vector plot locally…');
+      const bytes = copyPythonBytes(browserApi.plot_svg_bytes(payload.name));
+      value = bytes.buffer;
+      transfer.push(bytes.buffer);
+      status('ready', 'SVG ready to download.', 'ready');
     } else if (op === 'platemap-yaml') {
       value = unwrapEnvelope(browserApi.platemap_yaml_json(JSON.stringify(payload)));
     } else if (op === 'reset') {

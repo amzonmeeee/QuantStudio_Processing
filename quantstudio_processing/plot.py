@@ -121,7 +121,21 @@ def plate_heatmap(wells: pd.DataFrame, value: str = "ct", title: str | None = No
         grid.loc[r["row"], int(r["col"])] = pd.to_numeric(r.get(value), errors="coerce")
 
     fig, ax = plt.subplots(figsize=(0.55 * len(cols) + 2, 0.55 * len(rows) + 1.5))
-    im = ax.imshow(grid.values.astype(float), cmap="viridis_r", aspect="equal")
+    values = np.ma.masked_invalid(grid.values.astype(float))
+    x_edges = np.arange(len(cols) + 1) - 0.5
+    y_edges = np.arange(len(rows) + 1) - 0.5
+    im = ax.pcolormesh(
+        x_edges,
+        y_edges,
+        values,
+        cmap="viridis_r",
+        shading="flat",
+        antialiased=False,
+        rasterized=False,
+    )
+    ax.set_xlim(-0.5, len(cols) - 0.5)
+    ax.set_ylim(len(rows) - 0.5, -0.5)
+    ax.set_aspect("equal")
     ax.set_xticks(range(len(cols)), cols, fontsize=7)
     ax.set_yticks(range(len(rows)), rows, fontsize=7)
     if len(rows) * len(cols) <= 96:
@@ -131,7 +145,10 @@ def plate_heatmap(wells: pd.DataFrame, value: str = "ct", title: str | None = No
                 ax.text(j, i, "—" if pd.isna(v) else f"{v:.1f}",
                         ha="center", va="center", fontsize=6,
                         color="w" if pd.notna(v) and v < np.nanmean(grid.values) else "k")
-    fig.colorbar(im, ax=ax, shrink=.8, label=value)
+    colorbar = fig.colorbar(im, ax=ax, shrink=.8, label=value)
+    # Matplotlib rasterizes dense colorbars by default even when the plotted
+    # QuadMesh is vector. Keep the SVG export entirely editable.
+    colorbar.solids.set_rasterized(False)
     ax.set_title(title or f"{value} by well", fontsize=11)
     fig.tight_layout()
     return fig
