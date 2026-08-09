@@ -268,6 +268,81 @@ $('#btnReplaceConfirm').onclick = () => {
   $('#fileInput').click();
 };
 
+let pendingNavigation = null;
+let leaveReturnFocus = null;
+let leaveCloseTimer = null;
+let allowUnload = false;
+
+function openLeaveGuard(link) {
+  clearTimeout(leaveCloseTimer);
+  pendingNavigation = { href: link.href, target: link.target };
+  leaveReturnFocus = link;
+  const guard = $('#leaveGuard');
+  guard.hidden = false;
+  requestAnimationFrame(() => {
+    guard.dataset.open = '';
+    $('#btnStayHere').focus({ preventScroll: true });
+  });
+}
+
+function closeLeaveGuard({ restoreFocus = false } = {}) {
+  const guard = $('#leaveGuard');
+  if (guard.hidden) return;
+  delete guard.dataset.open;
+  leaveCloseTimer = setTimeout(() => {
+    guard.hidden = true;
+    if (restoreFocus && leaveReturnFocus?.isConnected) leaveReturnFocus.focus();
+    leaveReturnFocus = null;
+    pendingNavigation = null;
+  }, REDUCED_MOTION.matches ? 0 : 180);
+}
+
+$('#btnStayHere').onclick = () => closeLeaveGuard({ restoreFocus: true });
+$('#btnLeavePage').onclick = () => {
+  if (!pendingNavigation) return;
+  const destination = pendingNavigation;
+  if (destination.target === '_blank') {
+    window.open(destination.href, '_blank', 'noopener');
+    closeLeaveGuard({ restoreFocus: true });
+    return;
+  }
+  allowUnload = true;
+  window.location.assign(destination.href);
+};
+
+$('#leaveGuard').addEventListener('pointerdown', event => {
+  if (event.target === event.currentTarget) closeLeaveGuard({ restoreFocus: true });
+});
+$('#leaveGuard').addEventListener('keydown', event => {
+  if (event.key === 'Escape') {
+    event.preventDefault();
+    closeLeaveGuard({ restoreFocus: true });
+    return;
+  }
+  if (event.key !== 'Tab') return;
+  const controls = $$('button:not(:disabled)', event.currentTarget);
+  const first = controls[0], last = controls.at(-1);
+  if (event.shiftKey && document.activeElement === first) {
+    event.preventDefault(); last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault(); first.focus();
+  }
+});
+
+document.addEventListener('click', event => {
+  const link = event.target.closest('a[href]');
+  if (!link || !state.loaded || link.hasAttribute('download')) return;
+  if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+  const destination = new URL(link.href, window.location.href);
+  const current = new URL(window.location.href);
+  const sameDocument = destination.origin === current.origin
+    && destination.pathname === current.pathname
+    && destination.search === current.search;
+  if (sameDocument) return;
+  event.preventDefault();
+  openLeaveGuard(link);
+});
+
 /* ------------------------------------------------------------------ load */
 async function loadFile(file) {
   if (state.loading) return;
@@ -398,7 +473,10 @@ document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
     e.preventDefault(); undo();
   }
-  if (e.key === 'Escape') closePop({ restoreFocus: true });
+  if (e.key === 'Escape') {
+    closePop({ restoreFocus: true });
+    closeReplaceConfirm({ restoreFocus: true });
+  }
 });
 
 /* ----------------------------------------------------------- plate paint */
@@ -779,7 +857,7 @@ function replaceMapKey(source, oldKey, newKey) {
   return new Map([...source].map(([key, value]) => [key === oldKey ? newKey : key, value]));
 }
 
-function makeEditor({ kind, current = '', count = 0, onSave, onDelete, onCancel }) {
+function makeEditor({ kind, current = '', onSave, onCancel }) {
   const form = el('form', { class: 'inline-editor' });
   const input = el('input', {
     class: 'inline-input',
@@ -796,15 +874,6 @@ function makeEditor({ kind, current = '', count = 0, onSave, onDelete, onCancel 
   cancel.type = 'button';
   cancel.onclick = onCancel;
   controls.append(save, cancel);
-  if (current && onDelete) {
-    const remove = el('button', {
-      class: 'btn btn-mini btn-danger inline-delete',
-      textContent: count ? `Delete · ${count} wells` : 'Delete',
-    });
-    remove.type = 'button';
-    remove.onclick = onDelete;
-    controls.append(remove);
-  }
   form.append(input, controls);
   form.onsubmit = event => {
     event.preventDefault();
@@ -814,13 +883,55 @@ function makeEditor({ kind, current = '', count = 0, onSave, onDelete, onCancel 
   return form;
 }
 
+function itemAction(kind, label, onClick) {
+  const button = el('button', { class: `item-action item-${kind}` });
+  button.type = 'button';
+  button.setAttribute('aria-label', label);
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 18 18');
+  svg.setAttribute('aria-hidden', 'true');
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+  path.setAttribute(
+    'd',
+    kind === 'remove'
+      ? 'M4.5 4.5l9 9m0-9-9 9'
+      : 'M4 12.8V15h2.2L14 7.2 10.8 4 3 11.8M9.8 5l3.2 3.2',
+  );
+  svg.append(path);
+  button.append(svg, el('span', { class: 'sr-only', textContent: label }));
+  button.onclick = event => {
+    event.stopPropagation();
+    onClick();
+  };
+  return button;
+}
+
+function editableChoice(button, onSelect, onEdit) {
+  let singleClick = null;
+  button.addEventListener('click', event => {
+    if (event.detail === 0) { onSelect(); return; }
+    if (event.detail !== 1) return;
+    clearTimeout(singleClick);
+    singleClick = setTimeout(onSelect, 190);
+  });
+  button.addEventListener('dblclick', event => {
+    event.preventDefault();
+    clearTimeout(singleClick);
+    onEdit();
+  });
+  button.addEventListener('keydown', event => {
+    if (event.key !== 'F2') return;
+    event.preventDefault();
+    clearTimeout(singleClick);
+    onEdit();
+  });
+}
+
 function fieldEditorNode() {
   const original = fieldEditor?.original ?? null;
-  const count = original ? state.fields.get(original)?.size || 0 : 0;
   return makeEditor({
     kind: 'field',
     current: original || '',
-    count,
     onCancel: () => { fieldEditor = null; renderFields(); },
     onSave: (raw, form) => {
       const name = raw.trim();
@@ -853,25 +964,27 @@ function fieldEditorNode() {
       renderAll();
       animatePanel($('#fieldTabs'));
     },
-    onDelete: original ? () => {
-      if (state.fields.size <= 1) {
-        toast('Keep at least one plate-map field.', { tone: 'error' });
-        return;
-      }
-      const before = snapshotAll();
-      const keys = [...state.fields.keys()];
-      const next = keys[keys.indexOf(original) + 1] || keys[keys.indexOf(original) - 1];
-      state.fields.delete(original);
-      state.values.delete(original);
-      state.activeField = next;
-      state.activeValue = (state.values.get(next) || [])[0] ?? null;
-      fieldEditor = null;
-      invalidateAnalysis();
-      pushUndo(before, `Deleted the field “${original}”`);
-      renderAll();
-      animatePanel($('#fieldTabs'));
-    } : null,
   });
+}
+
+function deleteField(field) {
+  if (state.fields.size <= 1) {
+    toast('Keep at least one plate-map field.', { tone: 'error' });
+    return;
+  }
+  const before = snapshotAll();
+  const keys = [...state.fields.keys()];
+  const next = keys[keys.indexOf(field) + 1] || keys[keys.indexOf(field) - 1];
+  state.fields.delete(field);
+  state.values.delete(field);
+  state.activeField = next;
+  state.activeValue = (state.values.get(next) || [])[0] ?? null;
+  fieldEditor = null;
+  valueEditor = null;
+  invalidateAnalysis();
+  pushUndo(before, `Deleted the field “${field}”`);
+  renderAll();
+  animatePanel($('#fieldTabs'));
 }
 
 function renderFields() {
@@ -888,7 +1001,7 @@ function renderFields() {
     b.setAttribute('aria-controls', 'values');
     b.setAttribute('aria-selected', String(field === state.activeField));
     b.tabIndex = field === state.activeField ? 0 : -1;
-    b.onclick = () => {
+    const selectField = () => {
       state.activeField = field;
       state.activeValue = (state.values.get(field) || [])[0] ?? null;
       valueEditor = null;
@@ -896,16 +1009,19 @@ function renderFields() {
       animatePanel($('#values'), { x: 7, y: 0 });
       animatePanel($('#plate'), { y: 3 });
     };
-    const edit = el('button', { class: 'item-edit', textContent: 'Edit' });
-    edit.type = 'button';
-    edit.setAttribute('aria-label', `Edit field ${field}`);
-    edit.onclick = () => {
+    const editField = () => {
       state.activeField = field;
       state.activeValue = (state.values.get(field) || [])[0] ?? null;
       fieldEditor = { original: field };
       renderAll();
     };
-    item.append(b, edit);
+    editableChoice(b, selectField, editField);
+    const rename = itemAction('rename', `Rename field ${field}`, editField);
+    const remove = state.fields.size > 1
+      ? itemAction('remove', `Delete field ${field}`, () => deleteField(field))
+      : null;
+    item.append(b, rename);
+    if (remove) item.append(remove);
     tabs.append(item);
     if (fieldEditor?.original === field) tabs.append(fieldEditorNode());
   }
@@ -917,11 +1033,9 @@ function renderFields() {
 function valueEditorNode(value = null) {
   const field = state.activeField;
   const map = state.fields.get(field) || new Map();
-  const count = value ? [...map.values()].filter(item => item === value).length : 0;
   return makeEditor({
     kind: 'value',
     current: value || '',
-    count,
     onCancel: () => { valueEditor = null; renderValues(); },
     onSave: (raw, form) => {
       const name = raw.trim();
@@ -948,20 +1062,23 @@ function valueEditorNode(value = null) {
       syncSelects();
       animatePanel($('#values'));
     },
-    onDelete: value ? () => {
-      const before = snapshotAll();
-      const list = state.values.get(field);
-      list.splice(list.indexOf(value), 1);
-      for (const [pos, assigned] of map) if (assigned === value) map.delete(pos);
-      state.activeValue = list[0] ?? null;
-      valueEditor = null;
-      invalidateAnalysis();
-      pushUndo(before, `Deleted “${value}” and cleared ${count} assignment${count === 1 ? '' : 's'}`);
-      paintAll();
-      syncSelects();
-      animatePanel($('#values'));
-    } : null,
   });
+}
+
+function deleteValue(field, value) {
+  const map = state.fields.get(field) || new Map();
+  const count = [...map.values()].filter(item => item === value).length;
+  const before = snapshotAll();
+  const list = state.values.get(field);
+  list.splice(list.indexOf(value), 1);
+  for (const [pos, assigned] of map) if (assigned === value) map.delete(pos);
+  state.activeValue = list[0] ?? null;
+  valueEditor = null;
+  invalidateAnalysis();
+  pushUndo(before, `Deleted “${value}” and cleared ${count} assignment${count === 1 ? '' : 's'}`);
+  paintAll();
+  syncSelects();
+  animatePanel($('#values'));
 }
 
 function renderValues() {
@@ -984,12 +1101,12 @@ function renderValues() {
     b.append(el('span', { class: 'swatch', style: `background:${colourOf(field, v)}` }),
              el('span', { class: 'value-name', textContent: v }),
              el('span', { class: 'value-count', textContent: n }));
-    b.onclick = () => { state.activeValue = v; renderValues(); };
-    const edit = el('button', { class: 'item-edit', textContent: 'Edit' });
-    edit.type = 'button';
-    edit.setAttribute('aria-label', `Edit value ${v}`);
-    edit.onclick = () => { valueEditor = { value: v }; renderValues(); };
-    row.append(b, edit);
+    const selectValue = () => { state.activeValue = v; renderValues(); };
+    const editValue = () => { valueEditor = { value: v }; renderValues(); };
+    editableChoice(b, selectValue, editValue);
+    const rename = itemAction('rename', `Rename value ${v}`, editValue);
+    const remove = itemAction('remove', `Delete value ${v}`, () => deleteValue(field, v));
+    row.append(b, rename, remove);
     box.append(row);
     if (valueEditor?.value === v) box.append(valueEditorNode(v));
   }
@@ -1643,7 +1760,14 @@ function renderAll() {
   if (state.results) renderResults();
 }
 
-window.addEventListener('beforeunload', releasePlotUrls);
+window.addEventListener('beforeunload', event => {
+  if (!state.loaded || allowUnload) return;
+  event.preventDefault();
+  event.returnValue = '';
+});
+window.addEventListener('pagehide', event => {
+  if (!event.persisted) releasePlotUrls();
+});
 
 reserveWidth($('#btnRun'));
 reserveWidth($('#btnDownload'));

@@ -55,6 +55,8 @@ def _assert_true_vector_svg(data):
 def test_static_frontend_uses_the_local_worker_instead_of_http_apis():
     web = Path(__file__).resolve().parents[1] / "quantstudio_processing" / "web"
     app_source = (web / "app.js").read_text()
+    app_css = (web / "app.css").read_text()
+    index_source = (web / "index.html").read_text()
     worker_source = (web / "pyodide-worker.js").read_text()
 
     assert "/api/" not in app_source
@@ -75,7 +77,18 @@ def test_static_frontend_uses_the_local_worker_instead_of_http_apis():
     assert "plot-actions" in app_source
     assert "el('figure'" in app_source
     assert "prompt(" not in app_source
-    assert "Select another plate" in (web / "index.html").read_text()
+    assert "Select another plate" in index_source
+    assert "Leave this plate?" in index_source
+    assert 'id="leaveGuard"' in index_source
+    assert "beforeunload" in app_source
+    assert "pagehide" in app_source
+    assert "dblclick" in app_source
+    assert "itemAction('remove'" in app_source
+    assert "96 / 384 wells" in index_source
+    assert "plate-notch" not in index_source
+    assert "plateIllustrationTitle" not in index_source
+    assert "overflow-wrap: anywhere" in app_css
+    assert "max-width: 29ch" not in app_css
     for module in (
         "analysis.py",
         "browser.py",

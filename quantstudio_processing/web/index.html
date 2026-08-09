@@ -93,8 +93,8 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 
       <figure class="drop-visual">
         <svg class="drop-plate" viewBox="0 0 680 440" role="img"
-             aria-labelledby="plateIllustrationTitle plateIllustrationDesc">
-          <title id="plateIllustrationTitle">A vector drawing of a 96-well qPCR plate</title>
+             aria-label="96-well qPCR plate layout"
+             aria-describedby="plateIllustrationDesc">
           <desc id="plateIllustrationDesc">Eight rows and twelve columns of circular wells, with several assigned wells highlighted in jade.</desc>
           <defs>
             <pattern id="wellPattern" x="80" y="68" width="46" height="42" patternUnits="userSpaceOnUse">
@@ -102,8 +102,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
               <circle class="plate-well-core" cx="23" cy="21" r="8"></circle>
             </pattern>
           </defs>
-          <rect class="plate-shell" x="14" y="14" width="652" height="412" rx="32"></rect>
-          <path class="plate-notch" d="M14 184h9a12 12 0 0 1 0 24h-9"></path>
+          <path class="plate-shell" d="M60 14H634A32 32 0 0 1 666 46V394A32 32 0 0 1 634 426H46A32 32 0 0 1 14 394V60Z"></path>
           <g class="plate-labels" aria-hidden="true">
             <text x="103" y="50">1</text><text x="149" y="50">2</text>
             <text x="195" y="50">3</text><text x="241" y="50">4</text>
@@ -128,7 +127,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
           <path class="plate-ledger-line" d="M80 412h552"></path>
         </svg>
         <figcaption>
-          <span>96-well plate</span>
+          <span>96 / 384 wells</span>
           <span class="caption-rule" aria-hidden="true"></span>
           <span>local workspace</span>
         </figcaption>
@@ -196,7 +195,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
         <button class="btn btn-mini" id="btnAddField">New field</button>
       </div>
       <div class="tabs" id="fieldTabs" role="tablist" aria-label="Plate fields"></div>
-      <p class="rail-note" id="fieldNote">Each field becomes a results column: assay, sample, input copies, or another label you need.</p>
+      <p class="rail-note" id="fieldNote">Each field becomes a results column. Double-click to rename; remove appears on hover.</p>
     </section>
 
     <section class="rail-block grow">
@@ -205,7 +204,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
         <button class="btn btn-mini" id="btnAddValue">New value</button>
       </div>
       <div class="values" id="values" role="tabpanel" tabindex="0"></div>
-      <p class="rail-note">Pick a value, then drag across wells. Headers paint a whole line; right-click edits every field in that scope. Alt-drag erases.</p>
+      <p class="rail-note">Double-click a value to rename it. Pick one and drag to paint; right-click edits every field in that scope. Alt-drag erases.</p>
     </section>
 
     <section class="rail-block analysis-block">
@@ -274,6 +273,18 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
     <a href="https://github.com/amzonmeeee/QuantStudio_Processing" rel="source">Source on GitHub</a>.</p>
   <p>Python runs in your browser. Experimental data stays on your device.</p>
 </footer>
+
+<div class="leave-guard" id="leaveGuard" hidden>
+  <section class="leave-dialog" role="alertdialog" aria-modal="true"
+           aria-labelledby="leaveTitle" aria-describedby="leaveText" tabindex="-1">
+    <h2 id="leaveTitle">Leave this plate?</h2>
+    <p id="leaveText">The workbook, plate-map edits and analysis results only exist in this tab. Leaving will clear them.</p>
+    <div class="leave-actions">
+      <button class="btn btn-primary" id="btnStayHere" type="button">Stay here</button>
+      <button class="btn btn-danger" id="btnLeavePage" type="button">Leave page</button>
+    </div>
+  </section>
+</div>
 
 <div class="pop" id="pop" hidden role="dialog" aria-modal="false" aria-label="Plate properties" tabindex="-1"></div>
 <div class="toaster" id="toaster" aria-live="polite" aria-atomic="false"></div>

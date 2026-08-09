@@ -37,10 +37,11 @@ Drop an export on the page. The plate fills in from the file's own Sample Setup
 so you have something to work from, and from there:
 
 - **Fields** are the columns you want in the results — `assay`, `sample`,
-  `quantity`, or anything else you name. Add, rename, or delete them in place.
+  `quantity`, or anything else you name. Add them in place, double-click to
+  rename, or use the remove control that appears on hover.
 - **Values** are what a field can be. Pick one, then drag across the plate.
-  Values can also be added, renamed, or deleted in place. Row and column headers
-  paint a whole line; alt-drag erases; ⌘Z / Ctrl+Z undoes.
+  Values use the same add, double-click-to-rename, and remove pattern. Row and
+  column headers paint a whole line; alt-drag erases; ⌘Z / Ctrl+Z undoes.
 - **Right-click** a well, row, or column to edit every plate-map field for that
   scope at once. Instrument Ct values and QC results remain read-only.
 - **Fill from file** re-imports the export's own layout, and **Hold to clear
@@ -58,7 +59,9 @@ status line says how many were skipped.
 
 The hosted interface accepts `.xlsx` exports only. Analysis runs in a dedicated
 Python worker inside your browser: the workbook is never uploaded, and a reload
-clears it from memory. On the first visit the browser downloads Pyodide
+clears it from memory. Once a workbook is open, the interface warns before a
+link, reload, back navigation, or tab close can discard that local session. On
+the first visit the browser downloads Pyodide
 v314.0.3 and its scientific packages; plotting is downloaded only when an
 analysis first needs it. Bricolage Grotesque is embedded with its OFL license,
 matching jensen-l.com without a third-party font request; measurements and
