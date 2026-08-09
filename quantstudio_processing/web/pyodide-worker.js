@@ -52,17 +52,17 @@ async function ensureRuntime() {
   if (browserApi) return;
   if (!runtimePromise) {
     runtimePromise = (async () => {
-      status('runtime', 'Downloading the local Python runtime…');
+      status('runtime', 'Starting analyzer…');
       const { loadPyodide } = await import(PYODIDE_MODULE);
       const runtime = await loadPyodide();
 
-      status('packages', 'Loading the workbook analysis packages…');
+      status('packages', 'Loading components…');
       await runtime.loadPackage(['numpy', 'pandas', 'pyyaml', 'micropip'], {
         messageCallback: packageProgress,
         errorCallback: message => console.warn(`[Pyodide] ${message}`),
       });
 
-      status('packages', 'Installing the Excel reader…');
+      status('packages', 'Loading components…');
       const micropip = runtime.pyimport('micropip');
       try {
         await micropip.install('openpyxl==3.1.5');
@@ -70,12 +70,12 @@ async function ensureRuntime() {
         micropip.destroy();
       }
 
-      status('application', 'Loading QuantStudio Processing…');
+      status('application', 'Starting analyzer…');
       await installApplication(runtime);
       runtime.FS.mkdirTree('/work');
       pyodide = runtime;
       browserApi = runtime.pyimport('quantstudio_processing.browser');
-      status('ready', 'Local analyzer ready. Your workbook never leaves this browser.', 'ready');
+      status('ready', 'Ready', 'ready');
     })();
   }
 
@@ -85,7 +85,7 @@ async function ensureRuntime() {
     runtimePromise = null;
     pyodide = null;
     browserApi = null;
-    status('runtime', 'Could not start the local analyzer. Check the connection and retry.', 'error');
+    status('runtime', 'Analyzer unavailable', 'error');
     throw error;
   }
 }
@@ -93,7 +93,7 @@ async function ensureRuntime() {
 async function ensurePlotting() {
   if (plottingPromise) return plottingPromise;
   plottingPromise = (async () => {
-    status('packages', 'Loading the plotting engine for the first analysis…');
+    status('packages', 'Loading plotting…');
     await pyodide.loadPackage('matplotlib', {
       messageCallback: packageProgress,
       errorCallback: message => console.warn(`[Pyodide] ${message}`),
@@ -142,7 +142,7 @@ async function perform(message) {
     if (op === 'prepare') {
       value = { version: PYODIDE_VERSION };
     } else if (op === 'load') {
-      status('workbook', 'Reading the workbook in this browser…');
+      status('workbook', 'Opening workbook…');
       removeInput();
       pyodide.FS.writeFile(INPUT_PATH, new Uint8Array(payload.bytes));
       try {
@@ -150,10 +150,10 @@ async function perform(message) {
       } finally {
         removeInput();
       }
-      status('ready', 'Workbook loaded locally.', 'ready');
+      status('ready', 'Workbook ready', 'ready');
     } else if (op === 'analyze') {
       if (!payload.skip_plots) await ensurePlotting();
-      status('analysis', 'Running QC, summaries and plots locally…');
+      status('analysis', 'Running analysis…');
       value = unwrapEnvelope(browserApi.analyze_json(JSON.stringify(payload)));
       for (const name of Object.keys(value.plots || {})) {
         const bytes = copyPythonBytes(browserApi.plot_bytes(name));
@@ -162,25 +162,25 @@ async function perform(message) {
       }
       status('ready', 'Analysis complete.', 'ready');
     } else if (op === 'workbook') {
-      status('export', 'Building the processed workbook locally…');
+      status('export', 'Preparing export…');
       const bytes = copyPythonBytes(browserApi.workbook_bytes());
       value = bytes.buffer;
       transfer.push(bytes.buffer);
       status('ready', 'Workbook ready to download.', 'ready');
     } else if (op === 'curves-zip') {
-      status('export', 'Packaging curve images locally…');
+      status('export', 'Preparing export…');
       const bytes = copyPythonBytes(browserApi.plots_zip_bytes());
       value = bytes.buffer;
       transfer.push(bytes.buffer);
       status('ready', 'Curve images ready to download.', 'ready');
     } else if (op === 'curves-svg-zip') {
-      status('export', 'Packaging vector plots locally…');
+      status('export', 'Preparing export…');
       const bytes = copyPythonBytes(browserApi.svg_plots_zip_bytes());
       value = bytes.buffer;
       transfer.push(bytes.buffer);
       status('ready', 'Vector plots ready to download.', 'ready');
     } else if (op === 'plot-svg') {
-      status('export', 'Preparing the vector plot locally…');
+      status('export', 'Preparing export…');
       const bytes = copyPythonBytes(browserApi.plot_svg_bytes(payload.name));
       value = bytes.buffer;
       transfer.push(bytes.buffer);
@@ -202,7 +202,7 @@ async function perform(message) {
   } catch (error) {
     const detail = error?.stack || String(error);
     if (browserApi) {
-      status('ready', 'Local analyzer ready for another operation.', 'ready');
+      status('ready', 'Ready', 'ready');
     }
     self.postMessage({
       protocol: PROTOCOL,

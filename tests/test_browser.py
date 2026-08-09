@@ -89,6 +89,16 @@ def test_static_frontend_uses_the_local_worker_instead_of_http_apis():
     assert "plateIllustrationTitle" not in index_source
     assert "overflow-wrap: anywhere" in app_css
     assert "max-width: 29ch" not in app_css
+    assert "Local analyzer ready. Your workbook never leaves this browser." not in worker_source
+    assert "Starting analyzer…" in index_source
+    assert "runtimeStatusLabel" in app_source
+    assert "data-scroll-lens" in index_source
+    assert "progressive-blur" in app_css
+    assert "syncScrollLens" in app_source
+    assert "table-sticky-head" in app_source
+    assert "table-sticky-head" in app_css
+    assert "max-height: min(68vh" not in app_css
+    assert ".result-body { min-height: 180px; overflow: visible;" in app_css
     for module in (
         "analysis.py",
         "browser.py",

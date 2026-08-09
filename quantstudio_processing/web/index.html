@@ -39,7 +39,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
     </span>
     <div class="runtime-state" id="runtimeState" data-state="loading" role="status" aria-live="polite">
       <span class="runtime-dot" aria-hidden="true"></span>
-      <span id="runtimeText">Preparing the local analyzer…</span>
+      <span id="runtimeText">Starting analyzer…</span>
       <button class="btn btn-mini" id="btnRuntimeRetry" type="button" hidden>Retry</button>
     </div>
   </div>
@@ -194,7 +194,18 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
         <h3>Fields</h3>
         <button class="btn btn-mini" id="btnAddField">New field</button>
       </div>
-      <div class="tabs" id="fieldTabs" role="tablist" aria-label="Plate fields"></div>
+      <div class="scroll-lens" data-scroll-lens data-scroll-kind="fields" data-at-start>
+        <div class="scroll-lens-viewport" data-scroll-viewport tabindex="-1"
+             aria-label="Plate fields">
+          <div class="tabs" id="fieldTabs" role="tablist" aria-label="Plate fields"></div>
+        </div>
+        <div class="progressive-blur progressive-blur-top" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+        <div class="progressive-blur progressive-blur-bottom" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+      </div>
       <p class="rail-note" id="fieldNote">Each field becomes a results column. Double-click to rename; remove appears on hover.</p>
     </section>
 
@@ -203,7 +214,18 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
         <h3>Values</h3>
         <button class="btn btn-mini" id="btnAddValue">New value</button>
       </div>
-      <div class="values" id="values" role="tabpanel" tabindex="0"></div>
+      <div class="scroll-lens" data-scroll-lens data-scroll-kind="values" data-at-start>
+        <div class="scroll-lens-viewport" data-scroll-viewport tabindex="-1"
+             aria-label="Values for the selected field">
+          <div class="values" id="values" role="tabpanel" tabindex="-1"></div>
+        </div>
+        <div class="progressive-blur progressive-blur-top" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+        <div class="progressive-blur progressive-blur-bottom" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+      </div>
       <p class="rail-note">Double-click a value to rename it. Pick one and drag to paint; right-click edits every field in that scope. Alt-drag erases.</p>
     </section>
 
@@ -211,46 +233,59 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
       <div class="rail-head">
         <h3>Analysis</h3>
       </div>
-      <label class="field">
-        <span>Assay field</span>
-        <select id="selAssay"></select>
-      </label>
-      <label class="field">
-        <span>Replicate keys</span>
-        <div class="multi-picker" id="groupPicker" role="group" aria-label="Replicate keys"></div>
-        <select class="sr-only" id="selGroup" multiple size="3" tabindex="-1" aria-hidden="true"></select>
-      </label>
-      <label class="field">
-        <span>Input copies field</span>
-        <select id="selQuantity"></select>
-      </label>
-      <div class="field-row">
-        <label class="field">
-          <span>ΔCt target</span>
-          <select id="selDctA"></select>
-        </label>
-        <label class="field">
-          <span>Reference</span>
-          <select id="selDctB"></select>
-        </label>
-      </div>
-      <div class="thresholds" id="thresholds">
-        <button class="threshold-summary" id="btnThresholds" type="button"
-                aria-expanded="false" aria-controls="thresholdBody">
-          <span class="threshold-mark" aria-hidden="true"></span>
-          QC thresholds
-        </button>
-        <div class="threshold-body" id="thresholdBody" aria-hidden="true">
-          <div class="threshold-inner">
+      <div class="scroll-lens" data-scroll-lens data-scroll-kind="analysis" data-at-start>
+        <div class="scroll-lens-viewport" data-scroll-viewport tabindex="-1"
+             aria-label="Analysis settings">
+          <div class="analysis-controls">
+            <label class="field">
+              <span>Assay field</span>
+              <select id="selAssay"></select>
+            </label>
+            <label class="field">
+              <span>Replicate keys</span>
+              <div class="multi-picker" id="groupPicker" role="group" aria-label="Replicate keys"></div>
+              <select class="sr-only" id="selGroup" multiple size="3" tabindex="-1" aria-hidden="true"></select>
+            </label>
+            <label class="field">
+              <span>Input copies field</span>
+              <select id="selQuantity"></select>
+            </label>
             <div class="field-row">
-              <label class="field"><span>NTC margin</span>
-                <input type="number" id="optNtc" value="3" step="0.5" min="0"></label>
-              <label class="field"><span>Max Ct SD</span>
-                <input type="number" id="optSd" value="0.5" step="0.1" min="0"></label>
-              <label class="field"><span>Min Ct</span>
-                <input type="number" id="optCtMin" value="10" step="1" min="0"></label>
+              <label class="field">
+                <span>ΔCt target</span>
+                <select id="selDctA"></select>
+              </label>
+              <label class="field">
+                <span>Reference</span>
+                <select id="selDctB"></select>
+              </label>
+            </div>
+            <div class="thresholds" id="thresholds">
+              <button class="threshold-summary" id="btnThresholds" type="button"
+                      aria-expanded="false" aria-controls="thresholdBody">
+                <span class="threshold-mark" aria-hidden="true"></span>
+                QC thresholds
+              </button>
+              <div class="threshold-body" id="thresholdBody" aria-hidden="true">
+                <div class="threshold-inner">
+                  <div class="field-row">
+                    <label class="field"><span>NTC margin</span>
+                      <input type="number" id="optNtc" value="3" step="0.5" min="0"></label>
+                    <label class="field"><span>Max Ct SD</span>
+                      <input type="number" id="optSd" value="0.5" step="0.1" min="0"></label>
+                    <label class="field"><span>Min Ct</span>
+                      <input type="number" id="optCtMin" value="10" step="1" min="0"></label>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
+        </div>
+        <div class="progressive-blur progressive-blur-top" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
+        </div>
+        <div class="progressive-blur progressive-blur-bottom" aria-hidden="true">
+          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
         </div>
       </div>
     </section>

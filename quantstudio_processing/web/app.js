@@ -41,6 +41,10 @@ const state = {
 
 let fieldEditor = null;
 let valueEditor = null;
+let resultTableObserver = null;
+let scrollLensFrame = 0;
+const scrollLensSyncers = [];
+const scrollLensObservers = [];
 
 function animatePanel(node, { x = 0, y = 5 } = {}) {
   if (REDUCED_MOTION.matches || !node?.animate) return;
@@ -152,6 +156,8 @@ function releasePlotUrls() {
 }
 
 function clearResults(message = 'Results appear here once you run the analysis.') {
+  resultTableObserver?.disconnect();
+  resultTableObserver = null;
   releasePlotUrls();
   state.results = null;
   state.activeResultTab = null;
@@ -196,12 +202,25 @@ function clearLoadedUi() {
   clearResults();
 }
 
+function runtimeStatusLabel(status) {
+  if (status.state === 'error') return 'Analyzer unavailable';
+  if (status.state === 'ready') return 'Ready';
+  return {
+    runtime: 'Starting analyzer…',
+    packages: 'Loading components…',
+    application: 'Starting analyzer…',
+    workbook: 'Opening workbook…',
+    analysis: 'Running analysis…',
+    export: 'Preparing export…',
+  }[status.phase] || 'Working…';
+}
+
 function updateRuntimeStatus(status) {
   const runtime = $('#runtimeState');
   const runtimeState = status.state || 'loading';
   state.runtimeReady = runtimeState === 'ready';
   runtime.dataset.state = runtimeState;
-  $('#runtimeText').textContent = status.message;
+  $('#runtimeText').textContent = runtimeStatusLabel(status);
   const canRetry = runtimeState === 'error' && status.recoverable !== false;
   $('#btnRuntimeRetry').hidden = !canRetry;
   $('#btnPlateRetry').hidden = !canRetry || !state.loaded;
@@ -371,7 +390,7 @@ async function loadFile(file) {
   clearLoadedUi();
   $('#drop').dataset.busy = '';
   $('#fileInput').disabled = true;
-  $('#runtimeText').textContent = 'Opening the workbook locally…';
+  $('#runtimeText').textContent = 'Opening workbook…';
 
   try {
     const d = await localBackend.load(file);
@@ -1336,6 +1355,8 @@ async function runAnalysis() {
 
 /* ------------------------------------------------------------- results */
 function showSkeleton() {
+  resultTableObserver?.disconnect();
+  resultTableObserver = null;
   const body = $('#resultBody');
   body.dataset.kind = 'table';
   body.removeAttribute('aria-labelledby');
@@ -1404,6 +1425,8 @@ function renderResults() {
   }
 
   const body = $('#resultBody');
+  resultTableObserver?.disconnect();
+  resultTableObserver = null;
   body.removeAttribute('aria-label');
   body.setAttribute('aria-busy', 'false');
   body.setAttribute('aria-labelledby', `result-tab-${state.activeResultTab}`);
@@ -1625,6 +1648,9 @@ function fmt(v) {
 }
 
 function table({ columns, rows }) {
+  resultTableObserver?.disconnect();
+  resultTableObserver = null;
+
   const t = el('table');
   const thead = el('thead');
   const hr = el('tr');
@@ -1644,7 +1670,58 @@ function table({ columns, rows }) {
     tb.append(tr);
   }
   t.append(thead, tb);
-  return t;
+
+  /* Horizontal data movement and vertical page movement deliberately live in
+     different elements. The visible header is outside the horizontal scroller,
+     stays pinned below the result tabs, and mirrors its column geometry. */
+  const copyTable = el('table', { class: 'table-head-copy' });
+  copyTable.setAttribute('aria-hidden', 'true');
+  const colgroup = el('colgroup');
+  const copyCols = columns.map(() => el('col'));
+  colgroup.append(...copyCols);
+  const copyHead = el('thead');
+  const copyRow = el('tr');
+  columns.forEach(column => copyRow.append(el('th', { textContent: column })));
+  copyHead.append(copyRow);
+  copyTable.append(colgroup, copyHead);
+
+  const stickyTrack = el('div', { class: 'table-sticky-track' });
+  stickyTrack.append(copyTable);
+  const sticky = el('div', { class: 'table-sticky-head' });
+  sticky.append(stickyTrack);
+
+  const scroller = el('div', { class: 'table-x-scroll' });
+  scroller.tabIndex = 0;
+  scroller.setAttribute('role', 'region');
+  scroller.setAttribute('aria-label', 'Analysis result table. Scroll horizontally for more columns.');
+  scroller.append(t);
+
+  const region = el('div', { class: 'table-region' });
+  region.append(sticky, scroller);
+
+  const syncHeader = () => {
+    if (!t.isConnected) return;
+    const cells = $$('th', thead);
+    const tableWidth = Math.ceil(t.getBoundingClientRect().width);
+    copyCols.forEach((column, index) => {
+      column.style.width = `${cells[index].getBoundingClientRect().width}px`;
+    });
+    copyTable.style.width = `${tableWidth}px`;
+    stickyTrack.style.width = `${tableWidth}px`;
+    sticky.style.setProperty(
+      '--table-head-height',
+      `${Math.ceil(thead.getBoundingClientRect().height)}px`,
+    );
+    stickyTrack.style.transform = `translateX(${-scroller.scrollLeft}px)`;
+  };
+  scroller.addEventListener('scroll', syncHeader, { passive: true });
+  if ('ResizeObserver' in window) {
+    resultTableObserver = new ResizeObserver(syncHeader);
+    resultTableObserver.observe(scroller);
+    resultTableObserver.observe(t);
+  }
+  requestAnimationFrame(syncHeader);
+  return region;
 }
 
 /* ------------------------------------------------------------- exports */
@@ -1751,6 +1828,67 @@ function toggleAttr(node, attr, on) {
 
 function setStatus(text) { $('#plateStatus').textContent = text; }
 
+function syncScrollLens(lens) {
+  const viewport = $('[data-scroll-viewport]', lens);
+  if (!viewport) return;
+  const overflow = viewport.scrollHeight > viewport.clientHeight + 2;
+  const atStart = !overflow || viewport.scrollTop <= 1;
+  const atEnd = !overflow
+    || viewport.scrollTop + viewport.clientHeight >= viewport.scrollHeight - 1;
+  lens.toggleAttribute('data-overflow', overflow);
+  lens.toggleAttribute('data-at-start', atStart);
+  lens.toggleAttribute('data-at-end', atEnd);
+  viewport.tabIndex = overflow ? 0 : -1;
+}
+
+function scheduleScrollLenses() {
+  cancelAnimationFrame(scrollLensFrame);
+  scrollLensFrame = requestAnimationFrame(() => {
+    scrollLensFrame = 0;
+    scrollLensSyncers.forEach(sync => sync());
+  });
+}
+
+function setupScrollLenses() {
+  $$('[data-scroll-lens]').forEach(lens => {
+    const viewport = $('[data-scroll-viewport]', lens);
+    const sync = () => syncScrollLens(lens);
+    scrollLensSyncers.push(sync);
+    viewport.addEventListener('scroll', sync, { passive: true });
+
+    if ('ResizeObserver' in window) {
+      const resize = new ResizeObserver(sync);
+      resize.observe(viewport);
+      if (viewport.firstElementChild) resize.observe(viewport.firstElementChild);
+      scrollLensObservers.push(resize);
+    }
+    const mutation = new MutationObserver(scheduleScrollLenses);
+    mutation.observe(viewport, { childList: true, subtree: true });
+    scrollLensObservers.push(mutation);
+  });
+  scheduleScrollLenses();
+}
+
+function syncStickyOffsets() {
+  const root = document.documentElement;
+  const barHeight = Math.ceil($('.bar').getBoundingClientRect().height);
+  const tabsHeight = Math.ceil($('#resultTabs').getBoundingClientRect().height);
+  root.style.setProperty('--bar-height', `${barHeight}px`);
+  if (tabsHeight > 1) root.style.setProperty('--result-tabs-height', `${tabsHeight}px`);
+}
+
+function setupStickyOffsets() {
+  syncStickyOffsets();
+  if ('ResizeObserver' in window) {
+    const observer = new ResizeObserver(syncStickyOffsets);
+    observer.observe($('.bar'));
+    observer.observe($('#resultTabs'));
+    scrollLensObservers.push(observer);
+  } else {
+    window.addEventListener('resize', syncStickyOffsets, { passive: true });
+  }
+}
+
 function renderAll() {
   $$('.seg-btn').forEach(b =>
     b.setAttribute('aria-pressed', String(Number(b.dataset.format) === state.format)));
@@ -1758,6 +1896,7 @@ function renderAll() {
   renderPlate();
   syncSelects();
   if (state.results) renderResults();
+  scheduleScrollLenses();
 }
 
 window.addEventListener('beforeunload', event => {
@@ -1771,4 +1910,6 @@ window.addEventListener('pagehide', event => {
 
 reserveWidth($('#btnRun'));
 reserveWidth($('#btnDownload'));
+setupScrollLenses();
+setupStickyOffsets();
 void prepareRuntime();
