@@ -783,7 +783,7 @@ h1, h2, h3, p { text-wrap: pretty; }
 .scroll-cue {
   position: absolute;
   z-index: 4;
-  right: 7px;
+  right: 0;
   left: 0;
   height: 22px;
   pointer-events: none;
@@ -955,7 +955,7 @@ h1, h2, h3, p { text-wrap: pretty; }
 }
 .results-heading { display: block; margin-bottom: 30px; }
 .results-heading h2 { font-size: 1.75rem; font-weight: 700; }
-.results-heading p { max-width: 52ch; margin: 9px 0 0; color: var(--muted); font-size: .86rem; }
+.results-heading p { max-width: none; margin: 9px 0 0; color: var(--muted); font-size: .86rem; white-space: nowrap; }
 
 .tabs-result {
   position: sticky;
@@ -964,6 +964,7 @@ h1, h2, h3, p { text-wrap: pretty; }
   flex-wrap: nowrap;
   gap: 24px;
   overflow-x: auto;
+  overflow-y: hidden;
   background: var(--paper);
   border-bottom: 1px solid var(--line);
   scrollbar-width: thin;
@@ -1225,7 +1226,7 @@ td.flagcell { color: var(--flag); }
   .field select,
   .field input { min-height: 44px; }
   .results { margin-top: 48px; padding: 38px 0 54px; }
-  .results-heading p { margin-top: 8px; }
+  .results-heading p { margin-top: 8px; white-space: normal; }
   .tabs-result { gap: 22px; }
   .tabs-result .tab { min-height: 48px; }
   .result-body { max-height: none; padding-top: 18px; }

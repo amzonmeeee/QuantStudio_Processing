@@ -101,6 +101,11 @@ def test_static_frontend_uses_the_local_worker_instead_of_http_apis():
     assert "table-sticky-head" in app_source
     assert "table-sticky-head" in app_css
     assert "overflow-y: clip" in app_css
+    tabs_css = app_css.split(".tabs-result {", 1)[1].split("}", 1)[0]
+    cue_css = app_css.split(".scroll-cue {", 1)[1].split("}", 1)[0]
+    assert "overflow-y: hidden" in tabs_css
+    assert "right: 0" in cue_css
+    assert ".results-heading p { max-width: none;" in app_css
     assert "max-height: min(68vh" not in app_css
     assert ".result-body { min-height: 180px; overflow: visible;" in app_css
     for module in (
