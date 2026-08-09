@@ -3,25 +3,48 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>QuantStudio_Processing</title>
+<meta name="theme-color" content="#F6F7F3">
+<meta name="description" content="A local-first qPCR workspace for QuantStudio exports, plate maps, QC and plots.">
+<title>QuantStudio Processing — Jensen L.</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="app.css">
 </head>
-<body>
+<body><!--
+THESIS: Jensen's research folio becomes an operational assay ledger; it refuses the compressed grey SaaS dashboard and card grid.
+OWN-WORLD: Paper #F6F7F3, white work surfaces, ink #22282C, jade #157A5B, Bricolage headings, system UI, thin rules, circular wells, and precise data dots.
+STORY: Open one local workbook, map its plate, run QC, inspect the evidence, and export without uploading experimental data.
+FIRST VIEWPORT: A calm Jensen-branded bar sits above a two-column opening: direct tool copy and file action at left, a true 8 × 12 plate field at right; after load, the editable plate leads and its ledger controls sit beside it.
+FORM: Assay Ledger, user-pinned direction over grounded candidate 5; seed 273dfed8.
+FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
+-->
+
+<a class="skip-link" href="#workspace">Skip to workspace</a>
 
 <header class="bar">
-  <div class="wordmark">QuantStudio<span>_</span>Processing</div>
+  <div class="brand-lockup">
+    <a class="brand" href="https://jensen-l.com" rel="author">Jensen L.</a>
+    <span class="brand-divider" aria-hidden="true">/</span>
+    <span class="wordmark">QuantStudio_Processing</span>
+  </div>
 
   <div class="bar-file" id="fileChip" hidden>
     <span class="chip-name" id="chipName"></span>
     <span class="chip-meta" id="chipMeta"></span>
   </div>
 
-  <div class="bar-actions">
-    <span class="local-badge" title="Analysis stays on this device">Local only</span>
+  <div class="runtime-cluster">
+    <span class="local-badge" title="Analysis stays on this device">
+      <span class="local-dot" aria-hidden="true"></span>
+      Local only
+    </span>
+    <div class="runtime-state" id="runtimeState" data-state="loading" role="status" aria-live="polite">
+      <span class="runtime-dot" aria-hidden="true"></span>
+      <span id="runtimeText">Preparing the local analyzer…</span>
+      <button class="btn btn-mini" id="btnRuntimeRetry" type="button" hidden>Retry</button>
+    </div>
+  </div>
+
+  <div class="bar-actions" aria-label="Workbook actions">
     <button class="btn" id="btnYaml" disabled>Copy platemap</button>
     <button class="btn reserve" id="btnDownload" disabled
             data-states="Download workbook|Preparing download">
@@ -36,34 +59,55 @@
   </div>
 </header>
 
-<main class="shell">
+<main class="shell" id="workspace" tabindex="-1">
 
-  <!-- ---------------------------------------------------------- plate --- -->
-  <section class="stage" aria-label="Plate">
+  <section class="stage" aria-label="Plate workspace">
     <div class="drop" id="drop">
-      <div class="drop-inner">
-        <p class="drop-head">Drop a QuantStudio export here</p>
-        <p class="drop-sub">.xlsx from Design &amp; Analysis, 7500 or StepOne software</p>
-        <label class="btn btn-quiet">
-          Choose a file<input type="file" id="fileInput" accept=".xlsx" hidden>
-        </label>
-        <p class="drop-privacy">Your workbook is analysed on this device and never uploaded.</p>
-        <div class="runtime-state" id="runtimeState" data-state="loading" role="status" aria-live="polite">
-          <span class="runtime-dot" aria-hidden="true"></span>
-          <span id="runtimeText">Preparing the local analyzer…</span>
-          <button class="btn btn-mini" id="btnRuntimeRetry" type="button" hidden>Retry</button>
-        </div>
+      <div class="drop-copy">
+        <h1>QuantStudio<br>Processing</h1>
+        <p class="drop-head">Turn a QuantStudio workbook into a plate map, QC summary and publication-ready plots—without uploading it.</p>
+        <p class="drop-sub">Works with `.xlsx` exports from Design &amp; Analysis, 7500 and StepOne software.</p>
+        <button class="btn btn-primary file-button" id="btnFilePicker" type="button">
+          Choose an .xlsx file
+          <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+            <path d="M3 9h10M9.5 5.5 13 9l-3.5 3.5"></path>
+          </svg>
+        </button>
+        <input type="file" id="fileInput" accept=".xlsx" hidden>
+        <p class="drop-privacy">Or drop a workbook anywhere in this field. It is read in this tab and cleared when the tab closes.</p>
       </div>
+
+      <figure class="drop-visual" aria-label="A 96-well plate map">
+        <div class="drop-plate">
+          <span class="drop-axis drop-axis-top">1 — 12</span>
+          <span class="drop-axis drop-axis-side">A — H</span>
+          <div class="drop-plate-grid" aria-hidden="true"></div>
+        </div>
+        <figcaption>
+          <span>96-well plate</span>
+          <span class="caption-rule" aria-hidden="true"></span>
+          <span>local workspace</span>
+        </figcaption>
+      </figure>
     </div>
 
     <div class="plate-wrap" id="plateWrap" hidden>
+      <div class="workspace-heading">
+        <div>
+          <h1>Plate map</h1>
+          <p>Choose a field and value, then paint the wells you ran.</p>
+        </div>
+        <p class="workspace-privacy"><span aria-hidden="true"></span> Workbook held in this tab only</p>
+      </div>
+
       <div class="plate-head">
         <div class="seg" role="group" aria-label="Plate format">
-          <button class="seg-btn" data-format="96">96</button>
-          <button class="seg-btn" data-format="384">384</button>
+          <button class="seg-btn" data-format="96">96 wells</button>
+          <button class="seg-btn" data-format="384">384 wells</button>
         </div>
         <span class="hint" id="plateHint"></span>
         <div class="plate-head-right">
+          <button class="btn btn-quiet touch-mode" id="btnTouchMode" type="button" aria-pressed="false">Drag to pan</button>
           <button class="btn btn-quiet" id="btnFromFile">Fill from file</button>
           <button class="btn btn-quiet hold" id="btnClear">
             <span class="hold-fill" aria-hidden="true"></span>
@@ -72,38 +116,52 @@
         </div>
       </div>
 
-      <div class="plate" id="plate"></div>
+      <div class="plate-scroll" tabindex="0" aria-label="Scrollable plate map">
+        <div class="plate" id="plate"></div>
+      </div>
 
       <div class="plate-foot">
-        <p class="status" id="plateStatus" role="status"></p>
-        <button class="btn btn-mini" id="btnPlateRetry" type="button" hidden>Retry analyzer</button>
-        <p class="legend-note">Fill is the assignment · hatching is a QC flag · — is Undetermined</p>
+        <div class="plate-status-group">
+          <p class="status" id="plateStatus" role="status"></p>
+          <button class="btn btn-mini" id="btnPlateRetry" type="button" hidden>Retry analyzer</button>
+        </div>
+        <p class="legend-note">
+          <span><i class="legend-fill" aria-hidden="true"></i> assignment</span>
+          <span><i class="legend-flag" aria-hidden="true"></i> QC flag</span>
+          <span>— Undetermined</span>
+        </p>
       </div>
     </div>
   </section>
 
-  <!-- ----------------------------------------------------------- rail --- -->
   <aside class="rail" aria-label="Plate design">
-    <div class="rail-block">
+    <div class="rail-intro">
+      <h2>Plate design</h2>
+      <p>Define the columns and labels that should travel with each well.</p>
+    </div>
+
+    <section class="rail-block">
       <div class="rail-head">
-        <h2>Fields</h2>
+        <h3>Fields</h3>
         <button class="btn btn-mini" id="btnAddField">New field</button>
       </div>
-      <div class="tabs" id="fieldTabs"></div>
-      <p class="rail-note" id="fieldNote">A field is one column of the results table — the primer set, the template, the input copies. Paint wells to fill it.</p>
-    </div>
+      <div class="tabs" id="fieldTabs" role="tablist" aria-label="Plate fields"></div>
+      <p class="rail-note" id="fieldNote">Each field becomes a results column: assay, sample, input copies, or another label you need.</p>
+    </section>
 
-    <div class="rail-block grow">
+    <section class="rail-block grow">
       <div class="rail-head">
-        <h2>Values</h2>
+        <h3>Values</h3>
         <button class="btn btn-mini" id="btnAddValue">New value</button>
       </div>
-      <div class="values" id="values"></div>
-      <p class="rail-note">Pick a value, then drag across the plate. Row and column headers paint the whole line. Alt-drag erases.</p>
-    </div>
+      <div class="values" id="values" role="tabpanel" tabindex="0"></div>
+      <p class="rail-note">Pick a value, then drag across wells. Row and column headers paint a line. Alt-drag erases.</p>
+    </section>
 
-    <div class="rail-block">
-      <h2>Analysis</h2>
+    <section class="rail-block analysis-block">
+      <div class="rail-head">
+        <h3>Analysis</h3>
+      </div>
       <label class="field">
         <span>Assay field</span>
         <select id="selAssay"></select>
@@ -122,7 +180,7 @@
           <select id="selDctA"></select>
         </label>
         <label class="field">
-          <span>reference</span>
+          <span>Reference</span>
           <select id="selDctB"></select>
         </label>
       </div>
@@ -137,22 +195,28 @@
             <input type="number" id="optCtMin" value="10" step="1" min="0"></label>
         </div>
       </details>
-    </div>
+    </section>
   </aside>
 
-  <!-- -------------------------------------------------------- results --- -->
   <section class="results" id="results" aria-label="Results">
-    <div class="tabs tabs-result" id="resultTabs"></div>
-    <div class="result-body" id="resultBody">
+    <div class="results-heading">
+      <h2>Analysis results</h2>
+      <p>Review every calculation before taking the workbook or plots downstream.</p>
+    </div>
+    <div class="tabs tabs-result" id="resultTabs" role="tablist" aria-label="Analysis results"></div>
+    <div class="result-body" id="resultBody" role="tabpanel" tabindex="0">
       <p class="empty">Results appear here once you run the analysis.</p>
     </div>
   </section>
 </main>
 
-<!-- well inspector, opens from wherever it was triggered -->
-<div class="pop" id="pop" hidden role="dialog" aria-label="Well detail"></div>
+<footer class="app-footer">
+  <p>A local research tool by <a href="https://jensen-l.com">Jensen Luo</a>.</p>
+  <p>Python runs in your browser. Experimental data stays on your device.</p>
+</footer>
 
-<div class="toaster" id="toaster" aria-live="polite"></div>
+<div class="pop" id="pop" hidden role="dialog" aria-modal="false" aria-label="Well detail" tabindex="-1"></div>
+<div class="toaster" id="toaster" aria-live="polite" aria-atomic="false"></div>
 
 <script type="module" src="app.js"></script>
 </body>

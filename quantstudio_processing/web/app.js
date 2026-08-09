@@ -18,6 +18,7 @@ const DYES = 8;
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const FORMATS = { 96: { rows: 8, cols: 12 }, 384: { rows: 16, cols: 24 } };
+const COARSE_POINTER = matchMedia('(pointer: coarse)').matches;
 
 const state = {
   loaded: false, loading: false, runtimeReady: false, sourceFile: null,
@@ -28,6 +29,7 @@ const state = {
   values: new Map(),             // field -> [value, ...] in creation order
   activeField: null,
   activeValue: null,
+  touchPaint: false,
   flags: new Map(),              // well -> qc flag text
   undo: [],
   results: null,
@@ -139,7 +141,11 @@ function clearResults(message = 'Results appear here once you run the analysis.'
   state.activeResultTab = null;
   state.flags = new Map();
   $('#resultTabs').replaceChildren();
-  $('#resultBody').replaceChildren(el('p', { class: 'empty', textContent: message }));
+  const body = $('#resultBody');
+  body.removeAttribute('aria-labelledby');
+  body.setAttribute('aria-label', 'Analysis results');
+  body.setAttribute('aria-busy', 'false');
+  body.replaceChildren(el('p', { class: 'empty', textContent: message }));
   $('#btnDownload').disabled = true;
 }
 
@@ -211,6 +217,7 @@ async function prepareRuntime({ restart = false } = {}) {
 
 $('#btnRuntimeRetry').onclick = () => { void prepareRuntime({ restart: true }); };
 $('#btnPlateRetry').onclick = () => { void prepareRuntime({ restart: true }); };
+$('#btnFilePicker').onclick = () => $('#fileInput').click();
 
 /* ------------------------------------------------------------------ load */
 async function loadFile(file) {
@@ -334,7 +341,7 @@ document.addEventListener('keydown', e => {
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
     e.preventDefault(); undo();
   }
-  if (e.key === 'Escape') closePop();
+  if (e.key === 'Escape') closePop({ restoreFocus: true });
 });
 
 /* ----------------------------------------------------------- plate paint */
@@ -346,17 +353,25 @@ function renderPlate() {
   plate.dataset.format = state.format;
   // wells are capped rather than stretched: a 96-well plate on a wide screen
   // should still look like a plate, not fill the window
-  const cap = state.format === 384 ? 26 : 44;
-  plate.style.gridTemplateColumns = `18px repeat(${cols}, minmax(0, ${cap}px))`;
+  const cap = COARSE_POINTER ? 44 : state.format === 384 ? 26 : 44;
+  const header = COARSE_POINTER ? 44 : 18;
+  plate.style.gridTemplateColumns = `${header}px repeat(${cols}, minmax(0, ${cap}px))`;
   plate.replaceChildren();
 
   plate.append(el('div'));
-  for (let c = 1; c <= cols; c++)
-    plate.append(el('button', { class: 'hdr', textContent: c, dataset: { col: c } }));
+  for (let c = 1; c <= cols; c++) {
+    const header = el('button', { class: 'hdr', textContent: c, dataset: { col: c } });
+    header.type = 'button';
+    header.setAttribute('aria-label', `Paint column ${c}`);
+    plate.append(header);
+  }
 
   for (let r = 0; r < rows; r++) {
     const letter = String.fromCharCode(65 + r);
-    plate.append(el('button', { class: 'hdr', textContent: letter, dataset: { row: letter } }));
+    const header = el('button', { class: 'hdr', textContent: letter, dataset: { row: letter } });
+    header.type = 'button';
+    header.setAttribute('aria-label', `Paint row ${letter}`);
+    plate.append(header);
     for (let c = 1; c <= cols; c++) {
       const pos = letter + c;
       const w = el('button', { class: 'well', dataset: { pos } });
@@ -364,8 +379,24 @@ function renderPlate() {
       plate.append(w);
     }
   }
+  syncTouchMode();
   paintAll();
 }
+
+function syncTouchMode() {
+  const button = $('#btnTouchMode');
+  button.setAttribute('aria-pressed', String(state.touchPaint));
+  button.textContent = state.touchPaint ? 'Drag to paint' : 'Drag to pan';
+  $('#plate').dataset.touchMode = state.touchPaint ? 'paint' : 'pan';
+}
+
+$('#btnTouchMode').onclick = () => {
+  state.touchPaint = !state.touchPaint;
+  syncTouchMode();
+  setStatus(state.touchPaint
+    ? 'Touch paint is on. Drag across wells to assign the selected value.'
+    : 'Touch pan is on. Drag to move around the plate; tap a well to assign it.');
+};
 
 function colourOf(field, value) {
   const list = state.values.get(field) || [];
@@ -387,10 +418,12 @@ function paintAll() {
     w.textContent = has ? (ct == null ? '—' : ct.toFixed(1)) : '';
     const flag = state.flags.get(pos);
     toggleAttr(w, 'data-flag', !!flag);
-    w.title = has
+    const label = has
       ? `${pos}${v ? ` · ${field}: ${v}` : ''}${ct == null ? ' · Undetermined' : ` · Ct ${ct}`}` +
         (flag ? ` · ${flag}` : '')
       : `${pos} · no data in this export`;
+    w.title = label;
+    w.setAttribute('aria-label', `${label}. Shift+Enter opens well details.`);
   }
   renderValues();
 }
@@ -402,10 +435,40 @@ function assign(pos, value) {
   return true;
 }
 
+function targetsForHeader(header) {
+  return header.dataset.col
+    ? [...Array(FORMATS[state.format].rows)].map((_, i) =>
+        String.fromCharCode(65 + i) + header.dataset.col)
+    : [...Array(FORMATS[state.format].cols)].map((_, i) =>
+        header.dataset.row + (i + 1));
+}
+
+function assignTargets(targets, label) {
+  if (!state.activeValue) {
+    setStatus('Pick a value in the Values list first, or add one.');
+    return;
+  }
+  const before = snapshotAll();
+  let touched = 0;
+  let skipped = 0;
+  for (const pos of targets) {
+    if (assign(pos, state.activeValue)) touched++; else skipped++;
+  }
+  if (touched) {
+    pushUndo(before, `Assigned ${label}`);
+    paintAll();
+    syncSelects();
+  }
+  setStatus(skipped
+    ? `${touched} well${touched === 1 ? '' : 's'} set. ${skipped} skipped — no data in this export.`
+    : `${touched} well${touched === 1 ? '' : 's'} set to ${state.activeValue}.`);
+}
+
 $('#plate').addEventListener('pointerdown', e => {
   const hdr = e.target.closest('.hdr');
   const well = e.target.closest('.well');
   if (!hdr && !well) return;
+  if (e.pointerType === 'touch' && !state.touchPaint) return;
   if (!state.activeValue && !e.altKey) {
     setStatus('Pick a value in the Values list first, or add one.');
     return;
@@ -414,11 +477,7 @@ $('#plate').addEventListener('pointerdown', e => {
   stroke = { erase: e.altKey, before: snapshotAll(), touched: 0, skipped: 0 };
 
   if (hdr) {
-    const targets = hdr.dataset.col
-      ? [...Array(FORMATS[state.format].rows)].map((_, i) =>
-          String.fromCharCode(65 + i) + hdr.dataset.col)
-      : [...Array(FORMATS[state.format].cols)].map((_, i) => hdr.dataset.row + (i + 1));
-    targets.forEach(p => applyStroke(p));
+    targetsForHeader(hdr).forEach(p => applyStroke(p));
     endStroke();
     return;
   }
@@ -465,8 +524,29 @@ function endStroke() {
 
 /* well detail, opening from the well it was triggered on */
 $('#plate').addEventListener('click', e => {
+  const hdr = e.target.closest('.hdr');
   const w = e.target.closest('.well');
-  if (!w || !e.altKey) return;
+  if (!hdr && !w) return;
+  if (e.altKey) {
+    if (w) openPop(w);
+    return;
+  }
+  // Pointer painting is handled above. A keyboard-generated button click has
+  // detail 0. In touch-pan mode, a tap assigns while a drag scrolls.
+  const shouldAssign = e.detail === 0
+    || (e.pointerType === 'touch' && !state.touchPaint);
+  if (!shouldAssign) return;
+  if (hdr) {
+    const label = hdr.dataset.col ? `column ${hdr.dataset.col}` : `row ${hdr.dataset.row}`;
+    assignTargets(targetsForHeader(hdr), label);
+    return;
+  }
+  assignTargets([w.dataset.pos], w.dataset.pos);
+});
+$('#plate').addEventListener('keydown', e => {
+  const w = e.target.closest('.well');
+  if (!w || e.key !== 'Enter' || !e.shiftKey) return;
+  e.preventDefault();
   openPop(w);
 });
 $('#plate').addEventListener('contextmenu', e => {
@@ -476,6 +556,8 @@ $('#plate').addEventListener('contextmenu', e => {
   openPop(w);
 });
 
+let popReturnFocus = null;
+
 function openPop(wellEl) {
   const pos = wellEl.dataset.pos;
   const pop = $('#pop');
@@ -483,8 +565,16 @@ function openPop(wellEl) {
   const ct = state.ct.get(pos);
   const rows = [...state.fields].map(([f, m]) => [f, m.get(pos) ?? '—']);
 
+  popReturnFocus = wellEl;
   pop.replaceChildren();
-  pop.append(el('p', { class: 'pop-head', textContent: pos }));
+  const heading = el('p', { class: 'pop-head', textContent: pos });
+  const close = el('button', { class: 'pop-close', textContent: 'Close' });
+  close.type = 'button';
+  close.setAttribute('aria-label', `Close details for well ${pos}`);
+  close.onclick = () => closePop({ restoreFocus: true });
+  const head = el('div', { class: 'pop-head-row' });
+  head.append(heading, close);
+  pop.append(head);
   const dl = el('dl');
   dl.append(el('dt', { textContent: 'Ct' }),
             el('dd', { textContent: !state.present.has(pos) ? 'no data' : ct == null ? 'Undetermined' : ct.toFixed(2) }));
@@ -501,14 +591,21 @@ function openPop(wellEl) {
   /* the overlay grows out of the well it came from rather than from nowhere */
   pop.style.transformOrigin =
     `${r.left + r.width / 2 - left}px ${r.top < top ? 0 : pop.offsetHeight}px`;
-  requestAnimationFrame(() => pop.dataset.open = '');
+  requestAnimationFrame(() => {
+    pop.dataset.open = '';
+    pop.focus({ preventScroll: true });
+  });
 }
 
-function closePop() {
+function closePop({ restoreFocus = false } = {}) {
   const pop = $('#pop');
   if (pop.hidden) return;
   delete pop.dataset.open;
-  setTimeout(() => { pop.hidden = true; }, 160);
+  setTimeout(() => {
+    pop.hidden = true;
+    if (restoreFocus && popReturnFocus?.isConnected) popReturnFocus.focus();
+    popReturnFocus = null;
+  }, 190);
 }
 document.addEventListener('pointerdown', e => {
   if (!e.target.closest('#pop') && !e.target.closest('.well')) closePop();
@@ -518,10 +615,15 @@ document.addEventListener('pointerdown', e => {
 function renderFields() {
   const tabs = $('#fieldTabs');
   tabs.replaceChildren();
+  let index = 0;
   for (const field of state.fields.keys()) {
     const b = el('button', { class: 'tab', textContent: field });
     b.type = 'button';
+    b.id = `field-tab-${index++}`;
+    b.setAttribute('role', 'tab');
+    b.setAttribute('aria-controls', 'values');
     b.setAttribute('aria-selected', String(field === state.activeField));
+    b.tabIndex = field === state.activeField ? 0 : -1;
     b.onclick = () => {
       state.activeField = field;
       state.activeValue = (state.values.get(field) || [])[0] ?? null;
@@ -529,6 +631,8 @@ function renderFields() {
     };
     tabs.append(b);
   }
+  const selected = $('.tab[aria-selected="true"]', tabs);
+  if (selected) $('#values').setAttribute('aria-labelledby', selected.id);
 }
 
 function renderValues() {
@@ -618,6 +722,19 @@ $('#btnFromFile').onclick = () => fillFromFile();
   });
   for (const ev of ['pointerup', 'pointerleave', 'pointercancel'])
     btn.addEventListener(ev, stop);
+  btn.addEventListener('keydown', e => {
+    if (!['Enter', ' '].includes(e.key)) return;
+    e.preventDefault();
+    if (e.repeat || raf) return;
+    start = performance.now();
+    raf = requestAnimationFrame(tick);
+  });
+  btn.addEventListener('keyup', e => {
+    if (!['Enter', ' '].includes(e.key)) return;
+    e.preventDefault();
+    stop();
+  });
+  btn.addEventListener('blur', stop);
   document.addEventListener('keydown', e => { if (e.key === 'Escape') stop(); });
 
   function doClear() {
@@ -745,6 +862,9 @@ async function runAnalysis() {
 /* ------------------------------------------------------------- results */
 function showSkeleton() {
   const body = $('#resultBody');
+  body.removeAttribute('aria-labelledby');
+  body.setAttribute('aria-label', 'Analysis running');
+  body.setAttribute('aria-busy', 'true');
   body.replaceChildren();
   /* rows are the height they will be when real, so arrival does not shift
      anything below them */
@@ -792,12 +912,19 @@ function renderResults() {
   for (const k of order) {
     const b = el('button', { class: 'tab', textContent: TAB_LABEL[k] ?? k });
     b.type = 'button';
+    b.id = `result-tab-${k}`;
+    b.setAttribute('role', 'tab');
+    b.setAttribute('aria-controls', 'resultBody');
     b.setAttribute('aria-selected', String(k === state.activeResultTab));
+    b.tabIndex = k === state.activeResultTab ? 0 : -1;
     b.onclick = () => { state.activeResultTab = k; renderResults(); };
     tabs.append(b);
   }
 
   const body = $('#resultBody');
+  body.removeAttribute('aria-label');
+  body.setAttribute('aria-busy', 'false');
+  body.setAttribute('aria-labelledby', `result-tab-${state.activeResultTab}`);
   body.replaceChildren();
   if (state.activeResultTab === 'plots') {
     const wrap = el('div', { class: 'plots' });
@@ -936,6 +1063,29 @@ function renderResults() {
     body.append(table(d.tables[state.activeResultTab]));
   }
 }
+
+function moveTabFocus(event) {
+  const tab = event.target.closest('[role="tab"]');
+  if (!tab) return;
+  const list = event.currentTarget;
+  const tabs = $$('[role="tab"]', list);
+  const current = tabs.indexOf(tab);
+  let next = null;
+  if (event.key === 'ArrowRight') next = tabs[(current + 1) % tabs.length];
+  if (event.key === 'ArrowLeft') next = tabs[(current - 1 + tabs.length) % tabs.length];
+  if (event.key === 'Home') next = tabs[0];
+  if (event.key === 'End') next = tabs.at(-1);
+  if (!next) return;
+  event.preventDefault();
+  next.focus();
+  next.click();
+  requestAnimationFrame(() => {
+    $('[role="tab"][aria-selected="true"]', list)?.focus();
+  });
+}
+
+$('#fieldTabs').addEventListener('keydown', moveTabFocus);
+$('#resultTabs').addEventListener('keydown', moveTabFocus);
 
 function fmt(v) {
   if (v === null || v === undefined || v === '') return '—';

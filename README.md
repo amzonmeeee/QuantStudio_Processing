@@ -54,8 +54,9 @@ The hosted interface accepts `.xlsx` exports only. Analysis runs in a dedicated
 Python worker inside your browser: the workbook is never uploaded, and a reload
 clears it from memory. On the first visit the browser downloads Pyodide
 v314.0.3 and its scientific packages; plotting is downloaded only when an
-analysis first needs it. The interface also asks Google Fonts for Archivo and
-IBM Plex Mono, with system-font fallbacks.
+analysis first needs it. Bricolage Grotesque is embedded with its OFL license,
+matching jensen-l.com without a third-party font request; measurements and
+tabular data use the browser's native monospace stack.
 
 ## Deploy to Cloudflare Workers
 
@@ -206,6 +207,11 @@ substituting 40 biases every mean it touches.
 
 ## Interface behaviour
 
+The browser UI uses the same paper, ink and jade family as jensen-l.com, then
+translates it into a dense assay ledger: flat rule-separated regions, circular
+wells and restrained controls instead of a generic dashboard of cards. The
+plate remains the visual and operational centre of the page.
+
 The GUI follows [interior.dev](https://www.interior.dev)'s three rules, in plain
 JS rather than React:
 
@@ -228,8 +234,8 @@ well inspector whose transform origin is the well that opened it.
 
 The plate carries two independent channels at once — fill is your assignment,
 hatching plus a red ring is a QC flag — so neither piece of information hides
-the other. The categorical colours are the instrument's own dye channels (FAM,
-SYBR, VIC, ROX, Cy5), and the selection colour is the 470 nm excitation blue.
+the other. Categorical colours remain limited to well assignments, while jade
+is reserved for interaction and selection across the rest of the interface.
 
 ## Project layout
 
