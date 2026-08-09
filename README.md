@@ -37,9 +37,12 @@ Drop an export on the page. The plate fills in from the file's own Sample Setup
 so you have something to work from, and from there:
 
 - **Fields** are the columns you want in the results — `assay`, `sample`,
-  `quantity`, or anything else you name. Add as many as you like.
+  `quantity`, or anything else you name. Add, rename, or delete them in place.
 - **Values** are what a field can be. Pick one, then drag across the plate.
-  Row and column headers paint a whole line; alt-drag erases; ⌘Z / Ctrl+Z undoes.
+  Values can also be added, renamed, or deleted in place. Row and column headers
+  paint a whole line; alt-drag erases; ⌘Z / Ctrl+Z undoes.
+- **Right-click** a well, row, or column to edit every plate-map field for that
+  scope at once. Instrument Ct values and QC results remain read-only.
 - **Fill from file** re-imports the export's own layout, and **Hold to clear
   plate** throws yours away. Both are undoable.
 - **96 / 384** switches the grid independently of what the file says, so an
@@ -48,7 +51,7 @@ so you have something to work from, and from there:
   the CLI reads, so a layout designed in the GUI becomes a file you can commit.
 - **Download workbook** gives you the processed `.xlsx`.
 - **Curves** lets you download each generated plot as a PNG or editable vector
-  SVG, or package all available PNG images into one ZIP.
+  SVG, or package all available PNG or SVG plots into separate ZIP archives.
 
 Wells with no data in the export are drawn recessed and can't be painted; the
 status line says how many were skipped.

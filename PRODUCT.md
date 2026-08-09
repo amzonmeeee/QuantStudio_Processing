@@ -22,8 +22,8 @@ The hosted workspace runs the existing Python analysis stack inside a dedicated 
 
 - The primary workflow is desktop research work with dense 96- or 384-well plate layouts.
 - Users drop or choose a QuantStudio-family `.xlsx`, optionally fill the plate from its Sample Setup, paint fields and values, select analysis groupings, run analysis, inspect result tables and curves, and export the result.
-- Row and column headers support whole-line painting; drag paints wells; Alt-drag erases; Command-Z or Control-Z undoes.
-- Generated artifacts include a processed `.xlsx`, platemap YAML, individual PNG or SVG plots, and a ZIP of PNG plots.
+- Row and column headers support whole-line painting; secondary click edits every user-defined field across a well, row, or column; drag paints wells; Alt-drag erases; Command-Z or Control-Z undoes.
+- Generated artifacts include a processed `.xlsx`, platemap YAML, individual PNG or SVG plots, and separate ZIP archives for all PNG or SVG plots.
 
 ## Capabilities and Constraints
 

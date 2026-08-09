@@ -45,6 +45,20 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
   </div>
 
   <div class="bar-actions" aria-label="Workbook actions">
+    <div class="replace-workbook">
+      <button class="btn btn-quiet" id="btnSelectAnother" type="button">Select another plate</button>
+      <div class="replace-confirm" id="replaceConfirm" role="alertdialog"
+           aria-labelledby="replaceConfirmTitle" aria-describedby="replaceConfirmText" hidden>
+        <div>
+          <strong id="replaceConfirmTitle">Replace this plate?</strong>
+          <span id="replaceConfirmText">Unsaved plate edits and results will be discarded.</span>
+        </div>
+        <div class="replace-confirm-actions">
+          <button class="btn btn-mini btn-danger" id="btnReplaceConfirm" type="button">Choose file</button>
+          <button class="btn btn-mini btn-quiet" id="btnReplaceCancel" type="button">Keep current</button>
+        </div>
+      </div>
+    </div>
     <button class="btn" id="btnYaml" disabled>Copy platemap</button>
     <button class="btn reserve" id="btnDownload" disabled
             data-states="Download workbook|Preparing download">
@@ -77,12 +91,42 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
         <p class="drop-privacy">Or drop a workbook anywhere in this field. It is read in this tab and cleared when the tab closes.</p>
       </div>
 
-      <figure class="drop-visual" aria-label="A 96-well plate map">
-        <div class="drop-plate">
-          <span class="drop-axis drop-axis-top">1 — 12</span>
-          <span class="drop-axis drop-axis-side">A — H</span>
-          <div class="drop-plate-grid" aria-hidden="true"></div>
-        </div>
+      <figure class="drop-visual">
+        <svg class="drop-plate" viewBox="0 0 680 440" role="img"
+             aria-labelledby="plateIllustrationTitle plateIllustrationDesc">
+          <title id="plateIllustrationTitle">A vector drawing of a 96-well qPCR plate</title>
+          <desc id="plateIllustrationDesc">Eight rows and twelve columns of circular wells, with several assigned wells highlighted in jade.</desc>
+          <defs>
+            <pattern id="wellPattern" x="80" y="68" width="46" height="42" patternUnits="userSpaceOnUse">
+              <circle class="plate-well" cx="23" cy="21" r="13"></circle>
+              <circle class="plate-well-core" cx="23" cy="21" r="8"></circle>
+            </pattern>
+          </defs>
+          <rect class="plate-shell" x="14" y="14" width="652" height="412" rx="32"></rect>
+          <path class="plate-notch" d="M14 184h9a12 12 0 0 1 0 24h-9"></path>
+          <g class="plate-labels" aria-hidden="true">
+            <text x="103" y="50">1</text><text x="149" y="50">2</text>
+            <text x="195" y="50">3</text><text x="241" y="50">4</text>
+            <text x="287" y="50">5</text><text x="333" y="50">6</text>
+            <text x="379" y="50">7</text><text x="425" y="50">8</text>
+            <text x="471" y="50">9</text><text x="517" y="50">10</text>
+            <text x="563" y="50">11</text><text x="609" y="50">12</text>
+            <text x="50" y="94">A</text><text x="50" y="136">B</text>
+            <text x="50" y="178">C</text><text x="50" y="220">D</text>
+            <text x="50" y="262">E</text><text x="50" y="304">F</text>
+            <text x="50" y="346">G</text><text x="50" y="388">H</text>
+          </g>
+          <rect class="plate-well-field" x="80" y="68" width="552" height="336"></rect>
+          <g class="plate-assigned" aria-hidden="true">
+            <circle cx="195" cy="131" r="9"></circle>
+            <circle cx="241" cy="131" r="9"></circle>
+            <circle cx="195" cy="173" r="9"></circle>
+            <circle cx="241" cy="173" r="9"></circle>
+            <circle cx="471" cy="299" r="9"></circle>
+            <circle cx="517" cy="299" r="9"></circle>
+          </g>
+          <path class="plate-ledger-line" d="M80 412h552"></path>
+        </svg>
         <figcaption>
           <span>96-well plate</span>
           <span class="caption-rule" aria-hidden="true"></span>
@@ -105,7 +149,13 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
           <button class="seg-btn" data-format="96">96 wells</button>
           <button class="seg-btn" data-format="384">384 wells</button>
         </div>
-        <span class="hint" id="plateHint"></span>
+        <span class="hint context-hint" id="plateHint">
+          <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
+            <rect x="3" y="2" width="12" height="14" rx="6"></rect>
+            <path d="M9 2v5"></path>
+          </svg>
+          Right-click a well, row, or column to edit all properties
+        </span>
         <div class="plate-head-right">
           <button class="btn btn-quiet touch-mode" id="btnTouchMode" type="button" aria-pressed="false">Drag to pan</button>
           <button class="btn btn-quiet" id="btnFromFile">Fill from file</button>
@@ -155,7 +205,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
         <button class="btn btn-mini" id="btnAddValue">New value</button>
       </div>
       <div class="values" id="values" role="tabpanel" tabindex="0"></div>
-      <p class="rail-note">Pick a value, then drag across wells. Row and column headers paint a line. Alt-drag erases.</p>
+      <p class="rail-note">Pick a value, then drag across wells. Headers paint a whole line; right-click edits every field in that scope. Alt-drag erases.</p>
     </section>
 
     <section class="rail-block analysis-block">
@@ -168,7 +218,8 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
       </label>
       <label class="field">
         <span>Replicate keys</span>
-        <select id="selGroup" multiple size="3"></select>
+        <div class="multi-picker" id="groupPicker" role="group" aria-label="Replicate keys"></div>
+        <select class="sr-only" id="selGroup" multiple size="3" tabindex="-1" aria-hidden="true"></select>
       </label>
       <label class="field">
         <span>Input copies field</span>
@@ -184,17 +235,25 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
           <select id="selDctB"></select>
         </label>
       </div>
-      <details class="thresholds">
-        <summary>QC thresholds</summary>
-        <div class="field-row">
-          <label class="field"><span>NTC margin</span>
-            <input type="number" id="optNtc" value="3" step="0.5" min="0"></label>
-          <label class="field"><span>Max Ct SD</span>
-            <input type="number" id="optSd" value="0.5" step="0.1" min="0"></label>
-          <label class="field"><span>Min Ct</span>
-            <input type="number" id="optCtMin" value="10" step="1" min="0"></label>
+      <div class="thresholds" id="thresholds">
+        <button class="threshold-summary" id="btnThresholds" type="button"
+                aria-expanded="false" aria-controls="thresholdBody">
+          <span class="threshold-mark" aria-hidden="true"></span>
+          QC thresholds
+        </button>
+        <div class="threshold-body" id="thresholdBody" aria-hidden="true">
+          <div class="threshold-inner">
+            <div class="field-row">
+              <label class="field"><span>NTC margin</span>
+                <input type="number" id="optNtc" value="3" step="0.5" min="0"></label>
+              <label class="field"><span>Max Ct SD</span>
+                <input type="number" id="optSd" value="0.5" step="0.1" min="0"></label>
+              <label class="field"><span>Min Ct</span>
+                <input type="number" id="optCtMin" value="10" step="1" min="0"></label>
+            </div>
+          </div>
         </div>
-      </details>
+      </div>
     </section>
   </aside>
 
@@ -211,11 +270,12 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 </main>
 
 <footer class="app-footer">
-  <p>A local research tool by <a href="https://jensen-l.com">Jensen Luo</a>.</p>
+  <p>A local research tool by <a href="https://jensen-l.com">Jensen Luo</a> ·
+    <a href="https://github.com/amzonmeeee/QuantStudio_Processing" rel="source">Source on GitHub</a>.</p>
   <p>Python runs in your browser. Experimental data stays on your device.</p>
 </footer>
 
-<div class="pop" id="pop" hidden role="dialog" aria-modal="false" aria-label="Well detail" tabindex="-1"></div>
+<div class="pop" id="pop" hidden role="dialog" aria-modal="false" aria-label="Plate properties" tabindex="-1"></div>
 <div class="toaster" id="toaster" aria-live="polite" aria-atomic="false"></div>
 
 <script type="module" src="app.js"></script>

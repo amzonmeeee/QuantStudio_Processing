@@ -36,6 +36,7 @@ class BrowserSession:
         self.plots: dict[str, bytes] = {}
         self.svg_plots: dict[str, bytes] = {}
         self.plots_archive: bytes | None = None
+        self.svg_plots_archive: bytes | None = None
         self.filename: str | None = None
 
     def reset(self):
@@ -44,6 +45,7 @@ class BrowserSession:
         self.plots = {}
         self.svg_plots = {}
         self.plots_archive = None
+        self.svg_plots_archive = None
         self.filename = None
         plt = sys.modules.get("matplotlib.pyplot")
         if plt is not None:
@@ -73,6 +75,7 @@ class BrowserSession:
         self.plots = {}
         self.svg_plots = {}
         self.plots_archive = None
+        self.svg_plots_archive = None
         if self.bundle is None:
             return _json_envelope(error="Load a workbook before running the analysis.")
         try:
@@ -111,13 +114,10 @@ class BrowserSession:
                 f"SVG plot {name!r} is no longer available."
             ) from exc
 
-    def plots_zip_bytes(self) -> bytes:
-        """Package the current PNG plots into one safe, reusable ZIP archive."""
-        if self.plots_archive is not None:
-            return self.plots_archive
-        if not self.plots:
+    def _plots_archive_bytes(self, plots: dict[str, bytes], extension: str) -> bytes:
+        if not plots:
             raise webcore.UserError(
-                "Run an analysis with plots before downloading plot images."
+                f"Run an analysis with plots before downloading {extension.upper()} plots."
             )
 
         source_stem = Path(self.filename or "quantstudio_export").stem
@@ -125,18 +125,32 @@ class BrowserSession:
         stem = stem or "quantstudio_export"
         buffer = _io.BytesIO()
         with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_STORED) as archive:
-            for name, data in self.plots.items():
+            for name, data in plots.items():
                 suffix = _PLOT_SUFFIXES.get(name)
                 if suffix is None:
                     suffix = re.sub(r"[^A-Za-z0-9_-]+", "_", name).strip("_")
                     suffix = suffix or "plot"
-                archive.writestr(f"{stem}_{suffix}.png", data)
+                archive.writestr(f"{stem}_{suffix}.{extension}", data)
+        return buffer.getvalue()
 
-        self.plots_archive = buffer.getvalue()
+    def plots_zip_bytes(self) -> bytes:
+        """Package the current PNG plots into one safe, reusable ZIP archive."""
+        if self.plots_archive is not None:
+            return self.plots_archive
+
+        self.plots_archive = self._plots_archive_bytes(self.plots, "png")
         # The UI already owns Blob copies of every PNG. Keep only the archive
         # in Python after it is requested instead of retaining both copies.
         self.plots = {}
         return self.plots_archive
+
+    def svg_plots_zip_bytes(self) -> bytes:
+        """Package every vector plot without consuming per-plot SVG downloads."""
+        if self.svg_plots_archive is None:
+            self.svg_plots_archive = self._plots_archive_bytes(
+                self.svg_plots, "svg"
+            )
+        return self.svg_plots_archive
 
     def workbook_bytes(self) -> bytes:
         if self.tables is None:
@@ -188,6 +202,10 @@ def plot_svg_bytes(name: str) -> bytes:
 
 def plots_zip_bytes() -> bytes:
     return _SESSION.plots_zip_bytes()
+
+
+def svg_plots_zip_bytes() -> bytes:
+    return _SESSION.svg_plots_zip_bytes()
 
 
 def workbook_bytes() -> bytes:

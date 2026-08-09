@@ -139,6 +139,10 @@ export const localBackend = {
     return request('curves-zip');
   },
 
+  curvesSvgZip() {
+    return request('curves-svg-zip');
+  },
+
   plotSvg(name) {
     return request('plot-svg', { name });
   },

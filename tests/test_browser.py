@@ -61,16 +61,21 @@ def test_static_frontend_uses_the_local_worker_instead_of_http_apis():
     assert "fetch(" not in app_source
     assert "new Worker" in (web / "pyodide-client.js").read_text()
     assert "curvesZip()" in (web / "pyodide-client.js").read_text()
+    assert "curvesSvgZip()" in (web / "pyodide-client.js").read_text()
     assert "plotSvg(name)" in (web / "pyodide-client.js").read_text()
     assert "browserApi.plots_zip_bytes()" in worker_source
+    assert "browserApi.svg_plots_zip_bytes()" in worker_source
     assert "browserApi.plot_bytes(name)" in worker_source
     assert "browserApi.plot_svg_bytes(payload.name)" in worker_source
     assert "Download all PNGs" in app_source
+    assert "Download all SVGs" in app_source
     assert "Download PNG" in app_source
     assert "Download SVG" in app_source
     assert "image/svg+xml;charset=utf-8" in app_source
     assert "plot-actions" in app_source
     assert "el('figure'" in app_source
+    assert "prompt(" not in app_source
+    assert "Select another plate" in (web / "index.html").read_text()
     for module in (
         "analysis.py",
         "browser.py",
@@ -179,6 +184,7 @@ def test_browser_session_errors_reset_state_and_plots():
     session.tables = {"stale": pd.DataFrame()}
     session.plots = {"plate": b"png", "melt": b"melt"}
     session.svg_plots = {"plate": b"<svg>plate</svg>"}
+    session.svg_plots_archive = b"stale svg zip"
     session.filename = "stale.xlsx"
 
     assert session.plot_svg_bytes("plate") == b"<svg>plate</svg>"
@@ -198,6 +204,7 @@ def test_browser_session_errors_reset_state_and_plots():
     assert session.tables is None
     assert session.plots == {}
     assert session.svg_plots == {}
+    assert session.svg_plots_archive is None
     assert session.filename is None
 
     session.reset()
@@ -205,6 +212,7 @@ def test_browser_session_errors_reset_state_and_plots():
     assert session.tables is None
     assert session.plots == {}
     assert session.svg_plots == {}
+    assert session.svg_plots_archive is None
     assert session.filename is None
 
 
@@ -256,6 +264,21 @@ def test_browser_exports_true_vector_svg_and_keeps_it_after_png_zip(
     for name, svg in svg_exports.items():
         assert session.plot_svg_bytes(name) is svg
 
+    svg_archive = session.svg_plots_zip_bytes()
+    assert session.svg_plots_zip_bytes() is svg_archive
+    with zipfile.ZipFile(io.BytesIO(svg_archive)) as archive:
+        assert archive.namelist() == [
+            "synthetic_384_amplification.svg",
+            "synthetic_384_plate_ct.svg",
+        ]
+        for name, plot_name in zip(
+            archive.namelist(), ["amplification", "plate"]
+        ):
+            assert archive.read(name) == svg_exports[plot_name]
+
+    for name, svg in svg_exports.items():
+        assert session.plot_svg_bytes(name) is svg
+
 
 def test_browser_packages_all_curve_images_into_a_reusable_zip():
     session = BrowserSession()
@@ -282,6 +305,8 @@ def test_browser_packages_all_curve_images_into_a_reusable_zip():
     empty = BrowserSession()
     with pytest.raises(webcore.UserError, match="analysis with plots"):
         empty.plots_zip_bytes()
+    with pytest.raises(webcore.UserError, match="analysis with plots"):
+        empty.svg_plots_zip_bytes()
 
 
 def test_browser_platemap_yaml_preserves_unicode_and_round_trips():

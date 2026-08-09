@@ -19,6 +19,7 @@ const MAX_FILE_BYTES = 50 * 1024 * 1024;
 const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const FORMATS = { 96: { rows: 8, cols: 12 }, 384: { rows: 16, cols: 24 } };
 const COARSE_POINTER = matchMedia('(pointer: coarse)').matches;
+const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)');
 
 const state = {
   loaded: false, loading: false, runtimeReady: false, sourceFile: null,
@@ -37,6 +38,21 @@ const state = {
   plotUrls: [],
   plotBlobs: new Map(),
 };
+
+let fieldEditor = null;
+let valueEditor = null;
+
+function animatePanel(node, { x = 0, y = 5 } = {}) {
+  if (REDUCED_MOTION.matches || !node?.animate) return;
+  node.getAnimations().forEach(animation => animation.cancel());
+  node.animate(
+    [
+      { opacity: .35, transform: `translate(${x}px, ${y}px)` },
+      { opacity: 1, transform: 'translate(0, 0)' },
+    ],
+    { duration: 230, easing: 'cubic-bezier(.22, 1, .36, 1)' },
+  );
+}
 
 /* ------------------------------------------------------------ press depth */
 /* The press is released on cancel and on losing the pointer, not only on a
@@ -142,11 +158,18 @@ function clearResults(message = 'Results appear here once you run the analysis.'
   state.flags = new Map();
   $('#resultTabs').replaceChildren();
   const body = $('#resultBody');
+  delete body.dataset.kind;
   body.removeAttribute('aria-labelledby');
   body.setAttribute('aria-label', 'Analysis results');
   body.setAttribute('aria-busy', 'false');
   body.replaceChildren(el('p', { class: 'empty', textContent: message }));
   $('#btnDownload').disabled = true;
+}
+
+function invalidateAnalysis() {
+  if (!state.results) return;
+  clearResults('The plate design changed. Run the analysis again to refresh these results.');
+  $('#runLabel').textContent = 'Run analysis';
 }
 
 function clearLoadedUi() {
@@ -162,6 +185,8 @@ function clearLoadedUi() {
   state.undo = [];
   state.activeField = null;
   state.activeValue = null;
+  fieldEditor = null;
+  valueEditor = null;
   $('#fileChip').hidden = true;
   $('#drop').hidden = false;
   $('#plateWrap').hidden = true;
@@ -180,7 +205,7 @@ function updateRuntimeStatus(status) {
   const canRetry = runtimeState === 'error' && status.recoverable !== false;
   $('#btnRuntimeRetry').hidden = !canRetry;
   $('#btnPlateRetry').hidden = !canRetry || !state.loaded;
-  $$('.plots-download-all, .plot-download-svg').forEach(button => {
+  $$('.plots-download-all, .plots-download-all-svg, .plot-download-svg').forEach(button => {
     button.disabled = runtimeState !== 'ready';
   });
 
@@ -219,6 +244,30 @@ $('#btnRuntimeRetry').onclick = () => { void prepareRuntime({ restart: true }); 
 $('#btnPlateRetry').onclick = () => { void prepareRuntime({ restart: true }); };
 $('#btnFilePicker').onclick = () => $('#fileInput').click();
 
+function closeReplaceConfirm({ restoreFocus = false } = {}) {
+  const confirm = $('#replaceConfirm');
+  if (confirm.hidden) return;
+  delete confirm.dataset.open;
+  setTimeout(() => {
+    confirm.hidden = true;
+    if (restoreFocus) $('#btnSelectAnother').focus();
+  }, REDUCED_MOTION.matches ? 0 : 180);
+}
+
+$('#btnSelectAnother').onclick = () => {
+  const confirm = $('#replaceConfirm');
+  confirm.hidden = false;
+  requestAnimationFrame(() => {
+    confirm.dataset.open = '';
+    $('#btnReplaceCancel').focus({ preventScroll: true });
+  });
+};
+$('#btnReplaceCancel').onclick = () => closeReplaceConfirm({ restoreFocus: true });
+$('#btnReplaceConfirm').onclick = () => {
+  closeReplaceConfirm();
+  $('#fileInput').click();
+};
+
 /* ------------------------------------------------------------------ load */
 async function loadFile(file) {
   if (state.loading) return;
@@ -240,6 +289,10 @@ async function loadFile(file) {
   }
 
   state.loading = true;
+  closeReplaceConfirm();
+  closePop();
+  fieldEditor = null;
+  valueEditor = null;
   clearLoadedUi();
   $('#drop').dataset.busy = '';
   $('#fileInput').disabled = true;
@@ -293,6 +346,8 @@ async function loadFile(file) {
 function fillFromFile({ quiet = false } = {}) {
   const src = state.fromFile || {};
   const before = snapshotAll();
+  fieldEditor = null;
+  valueEditor = null;
   state.fields = new Map();
   state.values = new Map();
   for (const [field, mapping] of Object.entries(src)) {
@@ -309,6 +364,7 @@ function fillFromFile({ quiet = false } = {}) {
   state.activeField = [...state.fields.keys()][0];
   state.activeValue = (state.values.get(state.activeField) || [])[0] ?? null;
   if (!quiet) {
+    invalidateAnalysis();
     pushUndo(before, 'Filled the plate from the file');
     renderAll();
   }
@@ -332,6 +388,7 @@ function pushUndo(snapshot, label) {
 function undo() {
   const s = state.undo.pop();
   if (!s) { toast('Nothing to undo'); return; }
+  invalidateAnalysis();
   Object.assign(state, s);
   renderAll();
   setStatus('Reverted the last change.');
@@ -351,6 +408,7 @@ function renderPlate() {
   const { rows, cols } = FORMATS[state.format];
   const plate = $('#plate');
   plate.dataset.format = state.format;
+  $('.seg').dataset.active = state.format;
   // wells are capped rather than stretched: a 96-well plate on a wide screen
   // should still look like a plate, not fill the window
   const cap = COARSE_POINTER ? 44 : state.format === 384 ? 26 : 44;
@@ -362,7 +420,7 @@ function renderPlate() {
   for (let c = 1; c <= cols; c++) {
     const header = el('button', { class: 'hdr', textContent: c, dataset: { col: c } });
     header.type = 'button';
-    header.setAttribute('aria-label', `Paint column ${c}`);
+    header.setAttribute('aria-label', `Paint column ${c}. Right-click or Shift+Enter to edit all properties.`);
     plate.append(header);
   }
 
@@ -370,7 +428,7 @@ function renderPlate() {
     const letter = String.fromCharCode(65 + r);
     const header = el('button', { class: 'hdr', textContent: letter, dataset: { row: letter } });
     header.type = 'button';
-    header.setAttribute('aria-label', `Paint row ${letter}`);
+    header.setAttribute('aria-label', `Paint row ${letter}. Right-click or Shift+Enter to edit all properties.`);
     plate.append(header);
     for (let c = 1; c <= cols; c++) {
       const pos = letter + c;
@@ -423,7 +481,7 @@ function paintAll() {
         (flag ? ` · ${flag}` : '')
       : `${pos} · no data in this export`;
     w.title = label;
-    w.setAttribute('aria-label', `${label}. Shift+Enter opens well details.`);
+    w.setAttribute('aria-label', `${label}. Right-click or Shift+Enter edits every property.`);
   }
   renderValues();
 }
@@ -455,6 +513,7 @@ function assignTargets(targets, label) {
     if (assign(pos, state.activeValue)) touched++; else skipped++;
   }
   if (touched) {
+    invalidateAnalysis();
     pushUndo(before, `Assigned ${label}`);
     paintAll();
     syncSelects();
@@ -465,6 +524,7 @@ function assignTargets(targets, label) {
 }
 
 $('#plate').addEventListener('pointerdown', e => {
+  if (e.button !== 0) return;
   const hdr = e.target.closest('.hdr');
   const well = e.target.closest('.well');
   if (!hdr && !well) return;
@@ -513,6 +573,7 @@ function endStroke() {
   stroke = null;
   if (!touched && !skipped) return;
   if (touched) {
+    invalidateAnalysis();
     pushUndo(before, `${erase ? 'Cleared' : 'Assigned'} ${touched} well${touched > 1 ? 's' : ''}`);
     renderValues();
     syncSelects();
@@ -522,13 +583,14 @@ function endStroke() {
     : `${touched} well${touched === 1 ? '' : 's'} set.`);
 }
 
-/* well detail, opening from the well it was triggered on */
+/* Scope editor: a secondary click edits every user-defined property without
+   making instrument Ct values mutable. */
 $('#plate').addEventListener('click', e => {
   const hdr = e.target.closest('.hdr');
   const w = e.target.closest('.well');
   if (!hdr && !w) return;
   if (e.altKey) {
-    if (w) openPop(w);
+    openPop(w || hdr);
     return;
   }
   // Pointer painting is handled above. A keyboard-generated button click has
@@ -544,79 +606,281 @@ $('#plate').addEventListener('click', e => {
   assignTargets([w.dataset.pos], w.dataset.pos);
 });
 $('#plate').addEventListener('keydown', e => {
-  const w = e.target.closest('.well');
-  if (!w || e.key !== 'Enter' || !e.shiftKey) return;
+  const target = e.target.closest('.well, .hdr');
+  if (!target || e.key !== 'Enter' || !e.shiftKey) return;
   e.preventDefault();
-  openPop(w);
+  openPop(target);
 });
 $('#plate').addEventListener('contextmenu', e => {
-  const w = e.target.closest('.well');
-  if (!w) return;
+  const target = e.target.closest('.well, .hdr');
+  if (!target) return;
   e.preventDefault();
-  openPop(w);
+  openPop(target);
 });
 
 let popReturnFocus = null;
+let popCloseTimer = null;
 
-function openPop(wellEl) {
-  const pos = wellEl.dataset.pos;
+function openPop(targetEl) {
+  clearTimeout(popCloseTimer);
+  const isWell = targetEl.classList.contains('well');
+  const targets = (isWell ? [targetEl.dataset.pos] : targetsForHeader(targetEl))
+    .filter(pos => state.present.has(pos));
+  const scope = isWell
+    ? targetEl.dataset.pos
+    : targetEl.dataset.col ? `Column ${targetEl.dataset.col}` : `Row ${targetEl.dataset.row}`;
   const pop = $('#pop');
-  const r = wellEl.getBoundingClientRect();
-  const ct = state.ct.get(pos);
-  const rows = [...state.fields].map(([f, m]) => [f, m.get(pos) ?? '—']);
+  const r = targetEl.getBoundingClientRect();
 
-  popReturnFocus = wellEl;
+  popReturnFocus = targetEl;
   pop.replaceChildren();
-  const heading = el('p', { class: 'pop-head', textContent: pos });
+  const heading = el('p', { class: 'pop-head', textContent: `Edit ${scope}` });
   const close = el('button', { class: 'pop-close', textContent: 'Close' });
   close.type = 'button';
-  close.setAttribute('aria-label', `Close details for well ${pos}`);
+  close.setAttribute('aria-label', `Close properties for ${scope.toLowerCase()}`);
   close.onclick = () => closePop({ restoreFocus: true });
   const head = el('div', { class: 'pop-head-row' });
   head.append(heading, close);
-  pop.append(head);
-  const dl = el('dl');
-  dl.append(el('dt', { textContent: 'Ct' }),
-            el('dd', { textContent: !state.present.has(pos) ? 'no data' : ct == null ? 'Undetermined' : ct.toFixed(2) }));
-  for (const [f, v] of rows) dl.append(el('dt', { textContent: f }), el('dd', { textContent: v }));
-  pop.append(dl);
-  const flag = state.flags.get(pos);
-  if (flag) pop.append(el('p', { class: 'pop-flag', textContent: flag }));
+  pop.append(
+    head,
+    el('p', {
+      class: 'pop-scope',
+      textContent: isWell
+        ? 'Set every plate-map field for this well.'
+        : `Changes apply to ${targets.length} wells with instrument data.`,
+    }),
+  );
+
+  if (isWell) {
+    const pos = targets[0];
+    const ct = state.ct.get(targetEl.dataset.pos);
+    const meta = el('dl', { class: 'pop-meta' });
+    meta.append(
+      el('dt', { textContent: 'Ct · read only' }),
+      el('dd', {
+        textContent: !pos ? 'no data' : ct == null ? 'Undetermined' : ct.toFixed(2),
+      }),
+    );
+    pop.append(meta);
+    const flag = state.flags.get(targetEl.dataset.pos);
+    if (flag) pop.append(el('p', { class: 'pop-flag', textContent: flag }));
+  }
+
+  const form = el('form', { class: 'pop-form' });
+  for (const [field, mapping] of state.fields) {
+    const values = targets.map(pos => mapping.get(pos) ?? '');
+    const unique = new Set(values);
+    const select = el('select', { dataset: { field } });
+    if (unique.size > 1) {
+      const mixed = new Option('Mixed — leave unchanged', '__mixed__');
+      mixed.disabled = true;
+      mixed.selected = true;
+      select.append(mixed);
+    }
+    select.append(new Option('Unassigned', '__none__'));
+    for (const value of state.values.get(field) || []) select.append(new Option(value, value));
+    if (unique.size === 1) select.value = values[0] || '__none__';
+    const label = el('label', { class: 'pop-field' });
+    label.append(el('span', { textContent: field }), select);
+    form.append(label);
+  }
+  if (!state.fields.size) {
+    form.append(el('p', { class: 'pop-empty', textContent: 'Add a field before editing plate properties.' }));
+  }
+  const actions = el('div', { class: 'pop-actions' });
+  const clear = el('button', { class: 'btn btn-mini btn-quiet', textContent: 'Clear assignments' });
+  clear.type = 'button';
+  clear.disabled = !targets.length || !state.fields.size;
+  clear.onclick = () => {
+    const before = snapshotAll();
+    for (const mapping of state.fields.values()) targets.forEach(pos => mapping.delete(pos));
+    invalidateAnalysis();
+    pushUndo(before, `Cleared properties for ${scope.toLowerCase()}`);
+    paintAll();
+    syncSelects();
+    closePop({ restoreFocus: true });
+  };
+  const save = el('button', { class: 'btn btn-mini btn-primary', textContent: 'Save changes' });
+  save.type = 'submit';
+  save.disabled = !targets.length || !state.fields.size;
+  actions.append(clear, save);
+  form.append(actions);
+  form.onsubmit = event => {
+    event.preventDefault();
+    const before = snapshotAll();
+    let changed = false;
+    for (const select of $$('select[data-field]', form)) {
+      if (select.value === '__mixed__') continue;
+      const mapping = state.fields.get(select.dataset.field);
+      for (const pos of targets) {
+        const old = mapping.get(pos) ?? '';
+        const next = select.value === '__none__' ? '' : select.value;
+        if (old === next) continue;
+        changed = true;
+        if (next) mapping.set(pos, next); else mapping.delete(pos);
+      }
+    }
+    if (changed) {
+      invalidateAnalysis();
+      pushUndo(before, `Updated properties for ${scope.toLowerCase()}`);
+      paintAll();
+      syncSelects();
+      setStatus(`${scope} properties updated.`);
+    }
+    closePop({ restoreFocus: true });
+  };
+  pop.append(form);
 
   pop.hidden = false;
-  const left = Math.min(r.left, innerWidth - 232);
-  const top = Math.min(r.bottom + 6, innerHeight - 160);
-  pop.style.left = `${Math.max(8, left)}px`;
-  pop.style.top = `${top}px`;
-  /* the overlay grows out of the well it came from rather than from nowhere */
-  pop.style.transformOrigin =
-    `${r.left + r.width / 2 - left}px ${r.top < top ? 0 : pop.offsetHeight}px`;
   requestAnimationFrame(() => {
+    const margin = 10;
+    const left = Math.max(margin, Math.min(r.left, innerWidth - pop.offsetWidth - margin));
+    const below = r.bottom + 7;
+    const top = below + pop.offsetHeight <= innerHeight - margin
+      ? below
+      : Math.max(margin, r.top - pop.offsetHeight - 7);
+    pop.style.left = `${left}px`;
+    pop.style.top = `${top}px`;
+    pop.style.transformOrigin =
+      `${r.left + r.width / 2 - left}px ${r.top < top ? 0 : pop.offsetHeight}px`;
     pop.dataset.open = '';
-    pop.focus({ preventScroll: true });
+    $('select, button', form)?.focus({ preventScroll: true });
   });
 }
 
 function closePop({ restoreFocus = false } = {}) {
   const pop = $('#pop');
   if (pop.hidden) return;
+  clearTimeout(popCloseTimer);
   delete pop.dataset.open;
-  setTimeout(() => {
+  popCloseTimer = setTimeout(() => {
     pop.hidden = true;
     if (restoreFocus && popReturnFocus?.isConnected) popReturnFocus.focus();
     popReturnFocus = null;
-  }, 190);
+  }, REDUCED_MOTION.matches ? 0 : 190);
 }
 document.addEventListener('pointerdown', e => {
-  if (!e.target.closest('#pop') && !e.target.closest('.well')) closePop();
+  if (!e.target.closest('#pop') && !e.target.closest('.well, .hdr')) closePop();
+  if (!e.target.closest('#replaceConfirm, #btnSelectAnother')) closeReplaceConfirm();
 });
 
 /* ------------------------------------------------------- fields & values */
+function editorError(form, message) {
+  let error = $('.inline-error', form);
+  if (!error) {
+    error = el('span', { class: 'inline-error' });
+    error.setAttribute('role', 'alert');
+    form.append(error);
+  }
+  error.textContent = message;
+}
+
+function replaceMapKey(source, oldKey, newKey) {
+  return new Map([...source].map(([key, value]) => [key === oldKey ? newKey : key, value]));
+}
+
+function makeEditor({ kind, current = '', count = 0, onSave, onDelete, onCancel }) {
+  const form = el('form', { class: 'inline-editor' });
+  const input = el('input', {
+    class: 'inline-input',
+    value: current,
+    placeholder: kind === 'field' ? 'Field name' : 'Value label',
+  });
+  input.type = 'text';
+  input.autocomplete = 'off';
+  input.setAttribute('aria-label', `${current ? 'Edit' : 'New'} ${kind}`);
+  const controls = el('span', { class: 'inline-actions' });
+  const save = el('button', { class: 'btn btn-mini btn-primary', textContent: current ? 'Save' : 'Add' });
+  save.type = 'submit';
+  const cancel = el('button', { class: 'btn btn-mini btn-quiet', textContent: 'Cancel' });
+  cancel.type = 'button';
+  cancel.onclick = onCancel;
+  controls.append(save, cancel);
+  if (current && onDelete) {
+    const remove = el('button', {
+      class: 'btn btn-mini btn-danger inline-delete',
+      textContent: count ? `Delete · ${count} wells` : 'Delete',
+    });
+    remove.type = 'button';
+    remove.onclick = onDelete;
+    controls.append(remove);
+  }
+  form.append(input, controls);
+  form.onsubmit = event => {
+    event.preventDefault();
+    onSave(input.value, form);
+  };
+  requestAnimationFrame(() => input.focus({ preventScroll: true }));
+  return form;
+}
+
+function fieldEditorNode() {
+  const original = fieldEditor?.original ?? null;
+  const count = original ? state.fields.get(original)?.size || 0 : 0;
+  return makeEditor({
+    kind: 'field',
+    current: original || '',
+    count,
+    onCancel: () => { fieldEditor = null; renderFields(); },
+    onSave: (raw, form) => {
+      const name = raw.trim();
+      if (!name) { editorError(form, 'Enter a field name.'); return; }
+      if (name === 'well_position') {
+        editorError(form, '“well_position” is reserved for workbook addresses.');
+        return;
+      }
+      if (state.fields.has(name) && name !== original) {
+        editorError(form, `“${name}” is already a field.`);
+        return;
+      }
+      if (name === original) { fieldEditor = null; renderFields(); return; }
+      const before = snapshotAll();
+      if (original) {
+        state.fields = replaceMapKey(state.fields, original, name);
+        state.values = replaceMapKey(state.values, original, name);
+        if (state.assayCol === original) state.assayCol = name;
+        if (state.quantityCol === original) state.quantityCol = name;
+        if (state.groupCols) state.groupCols = state.groupCols.map(key => key === original ? name : key);
+      } else {
+        state.fields.set(name, new Map());
+        state.values.set(name, []);
+      }
+      state.activeField = name;
+      state.activeValue = (state.values.get(name) || [])[0] ?? null;
+      fieldEditor = null;
+      invalidateAnalysis();
+      pushUndo(before, `${original ? 'Renamed' : 'Added'} the field “${name}”`);
+      renderAll();
+      animatePanel($('#fieldTabs'));
+    },
+    onDelete: original ? () => {
+      if (state.fields.size <= 1) {
+        toast('Keep at least one plate-map field.', { tone: 'error' });
+        return;
+      }
+      const before = snapshotAll();
+      const keys = [...state.fields.keys()];
+      const next = keys[keys.indexOf(original) + 1] || keys[keys.indexOf(original) - 1];
+      state.fields.delete(original);
+      state.values.delete(original);
+      state.activeField = next;
+      state.activeValue = (state.values.get(next) || [])[0] ?? null;
+      fieldEditor = null;
+      invalidateAnalysis();
+      pushUndo(before, `Deleted the field “${original}”`);
+      renderAll();
+      animatePanel($('#fieldTabs'));
+    } : null,
+  });
+}
+
 function renderFields() {
   const tabs = $('#fieldTabs');
   tabs.replaceChildren();
   let index = 0;
   for (const field of state.fields.keys()) {
+    const item = el('div', { class: 'field-item' });
+    item.setAttribute('role', 'presentation');
     const b = el('button', { class: 'tab', textContent: field });
     b.type = 'button';
     b.id = `field-tab-${index++}`;
@@ -627,12 +891,77 @@ function renderFields() {
     b.onclick = () => {
       state.activeField = field;
       state.activeValue = (state.values.get(field) || [])[0] ?? null;
+      valueEditor = null;
+      renderAll();
+      animatePanel($('#values'), { x: 7, y: 0 });
+      animatePanel($('#plate'), { y: 3 });
+    };
+    const edit = el('button', { class: 'item-edit', textContent: 'Edit' });
+    edit.type = 'button';
+    edit.setAttribute('aria-label', `Edit field ${field}`);
+    edit.onclick = () => {
+      state.activeField = field;
+      state.activeValue = (state.values.get(field) || [])[0] ?? null;
+      fieldEditor = { original: field };
       renderAll();
     };
-    tabs.append(b);
+    item.append(b, edit);
+    tabs.append(item);
+    if (fieldEditor?.original === field) tabs.append(fieldEditorNode());
   }
+  if (fieldEditor && !fieldEditor.original) tabs.append(fieldEditorNode());
   const selected = $('.tab[aria-selected="true"]', tabs);
   if (selected) $('#values').setAttribute('aria-labelledby', selected.id);
+}
+
+function valueEditorNode(value = null) {
+  const field = state.activeField;
+  const map = state.fields.get(field) || new Map();
+  const count = value ? [...map.values()].filter(item => item === value).length : 0;
+  return makeEditor({
+    kind: 'value',
+    current: value || '',
+    count,
+    onCancel: () => { valueEditor = null; renderValues(); },
+    onSave: (raw, form) => {
+      const name = raw.trim();
+      const list = state.values.get(field) || [];
+      if (!name) { editorError(form, 'Enter a value label.'); return; }
+      if (list.includes(name) && name !== value) {
+        editorError(form, `“${name}” is already in this field.`);
+        return;
+      }
+      if (name === value) { valueEditor = null; renderValues(); return; }
+      const before = snapshotAll();
+      if (value) {
+        const index = list.indexOf(value);
+        list[index] = name;
+        for (const [pos, assigned] of map) if (assigned === value) map.set(pos, name);
+      } else {
+        list.push(name);
+      }
+      state.activeValue = name;
+      valueEditor = null;
+      invalidateAnalysis();
+      pushUndo(before, `${value ? 'Renamed' : 'Added'} “${name}”`);
+      paintAll();
+      syncSelects();
+      animatePanel($('#values'));
+    },
+    onDelete: value ? () => {
+      const before = snapshotAll();
+      const list = state.values.get(field);
+      list.splice(list.indexOf(value), 1);
+      for (const [pos, assigned] of map) if (assigned === value) map.delete(pos);
+      state.activeValue = list[0] ?? null;
+      valueEditor = null;
+      invalidateAnalysis();
+      pushUndo(before, `Deleted “${value}” and cleared ${count} assignment${count === 1 ? '' : 's'}`);
+      paintAll();
+      syncSelects();
+      animatePanel($('#values'));
+    } : null,
+  });
 }
 
 function renderValues() {
@@ -642,12 +971,13 @@ function renderValues() {
   const map = state.fields.get(field) || new Map();
   box.replaceChildren();
 
-  if (!list.length) {
+  if (!list.length && !valueEditor) {
     box.append(el('p', { class: 'rail-note', textContent: 'No values yet. Add one, then drag across the plate.' }));
     return;
   }
   for (const v of list) {
     const n = [...map.values()].filter(x => x === v).length;
+    const row = el('div', { class: 'value-row' });
     const b = el('button', { class: 'value' });
     b.type = 'button';
     b.setAttribute('aria-pressed', String(v === state.activeValue));
@@ -655,27 +985,21 @@ function renderValues() {
              el('span', { class: 'value-name', textContent: v }),
              el('span', { class: 'value-count', textContent: n }));
     b.onclick = () => { state.activeValue = v; renderValues(); };
-    box.append(b);
+    const edit = el('button', { class: 'item-edit', textContent: 'Edit' });
+    edit.type = 'button';
+    edit.setAttribute('aria-label', `Edit value ${v}`);
+    edit.onclick = () => { valueEditor = { value: v }; renderValues(); };
+    row.append(b, edit);
+    box.append(row);
+    if (valueEditor?.value === v) box.append(valueEditorNode(v));
   }
+  if (valueEditor && !valueEditor.value) box.append(valueEditorNode());
 }
 
 $('#btnAddField').onclick = () => {
   if (!state.loaded) { toast('Load a workbook before editing the plate.'); return; }
-  const name = prompt('Name the field (it becomes a column in the results):');
-  if (!name) return;
-  const key = name.trim();
-  if (key === 'well_position') {
-    toast('“well_position” is reserved for the workbook well address.', { tone: 'error' });
-    return;
-  }
-  if (!key || state.fields.has(key)) { toast(`“${key}” is already a field`, { tone: 'error' }); return; }
-  const before = snapshotAll();
-  state.fields.set(key, new Map());
-  state.values.set(key, []);
-  state.activeField = key;
-  state.activeValue = null;
-  pushUndo(before, `Added the field “${key}”`);
-  renderAll();
+  fieldEditor = { original: null };
+  renderFields();
 };
 
 $('#btnAddValue').onclick = () => {
@@ -683,17 +1007,8 @@ $('#btnAddValue').onclick = () => {
     toast('Load a workbook before editing the plate.');
     return;
   }
-  const field = state.activeField;
-  const name = prompt(`New value for “${field}”:`);
-  if (!name) return;
-  const v = name.trim();
-  const list = state.values.get(field);
-  if (!v || list.includes(v)) { toast(`“${v}” is already there`, { tone: 'error' }); return; }
-  const before = snapshotAll();
-  list.push(v);
-  state.activeValue = v;
-  pushUndo(before, `Added “${v}”`);
-  renderAll();
+  valueEditor = { value: null };
+  renderValues();
 };
 
 $('#btnFromFile').onclick = () => fillFromFile();
@@ -740,6 +1055,7 @@ $('#btnFromFile').onclick = () => fillFromFile();
   function doClear() {
     const before = snapshotAll();
     for (const m of state.fields.values()) m.clear();
+    invalidateAnalysis();
     pushUndo(before, 'Cleared every assignment');
     renderAll();
     setStatus('Plate cleared.');
@@ -760,11 +1076,34 @@ function syncSelects() {
     return o;
   }));
   gsel.size = Math.min(4, Math.max(2, fields.length));
+  renderGroupPicker();
 
   const assay = $('#selAssay').value;
   const assayValues = state.values.get(assay) || [];
   fillSelect($('#selDctA'), ['(none)', ...assayValues], state.dctA ?? '(none)');
   fillSelect($('#selDctB'), ['(none)', ...assayValues], state.dctB ?? '(none)');
+}
+
+function renderGroupPicker() {
+  const picker = $('#groupPicker');
+  const select = $('#selGroup');
+  picker.replaceChildren();
+  for (const option of select.options) {
+    const button = el('button', { class: 'multi-option' });
+    button.type = 'button';
+    button.setAttribute('aria-pressed', String(option.selected));
+    button.append(
+      el('span', { class: 'multi-check', 'aria-hidden': 'true' }),
+      el('span', { class: 'multi-name', textContent: option.value }),
+    );
+    button.onclick = () => {
+      option.selected = !option.selected;
+      state.groupCols = [...select.selectedOptions].map(item => item.value);
+      renderGroupPicker();
+      animatePanel(picker, { x: 4, y: 0 });
+    };
+    picker.append(button);
+  }
 }
 
 function fillSelect(sel, options, chosen) {
@@ -775,17 +1114,32 @@ function fillSelect(sel, options, chosen) {
 $('#selAssay').onchange = e => { state.assayCol = e.target.value; syncSelects(); };
 $('#selQuantity').onchange = e => { state.quantityCol = e.target.value; };
 $('#selGroup').onchange = e =>
-  { state.groupCols = [...e.target.selectedOptions].map(o => o.value); };
+  {
+    state.groupCols = [...e.target.selectedOptions].map(o => o.value);
+    renderGroupPicker();
+  };
 $('#selDctA').onchange = e => { state.dctA = e.target.value; };
 $('#selDctB').onchange = e => { state.dctB = e.target.value; };
 
 $$('.seg-btn').forEach(b => {
   b.onclick = () => {
-    state.format = Number(b.dataset.format);
+    const next = Number(b.dataset.format);
+    if (next === state.format) return;
+    const direction = next > state.format ? 1 : -1;
+    state.format = next;
     renderAll();
+    animatePanel($('#plate'), { x: direction * 10, y: 0 });
     setStatus(`Showing a ${state.format}-well layout.`);
   };
 });
+
+$('#btnThresholds').onclick = () => {
+  const button = $('#btnThresholds');
+  const open = button.getAttribute('aria-expanded') !== 'true';
+  button.setAttribute('aria-expanded', String(open));
+  $('#thresholdBody').setAttribute('aria-hidden', String(!open));
+  $('#thresholds').toggleAttribute('data-open', open);
+};
 
 /* ----------------------------------------------------------------- run */
 $('#btnRun').onclick = () => {
@@ -857,11 +1211,16 @@ async function runAnalysis() {
   $('#btnDownload').disabled = false;
   renderResults();
   setStatus(`${d.n_wells} wells analysed. ${d.n_flagged} carry a QC flag.`);
+  requestAnimationFrame(() => $('#results').scrollIntoView({
+    behavior: REDUCED_MOTION.matches ? 'auto' : 'smooth',
+    block: 'start',
+  }));
 }
 
 /* ------------------------------------------------------------- results */
 function showSkeleton() {
   const body = $('#resultBody');
+  body.dataset.kind = 'table';
   body.removeAttribute('aria-labelledby');
   body.setAttribute('aria-label', 'Analysis running');
   body.setAttribute('aria-busy', 'true');
@@ -917,7 +1276,13 @@ function renderResults() {
     b.setAttribute('aria-controls', 'resultBody');
     b.setAttribute('aria-selected', String(k === state.activeResultTab));
     b.tabIndex = k === state.activeResultTab ? 0 : -1;
-    b.onclick = () => { state.activeResultTab = k; renderResults(); };
+    b.onclick = () => {
+      if (state.activeResultTab === k) return;
+      const previous = order.indexOf(state.activeResultTab);
+      state.activeResultTab = k;
+      renderResults();
+      animatePanel($('#resultBody'), { x: (order.indexOf(k) > previous ? 1 : -1) * 9, y: 0 });
+    };
     tabs.append(b);
   }
 
@@ -925,6 +1290,7 @@ function renderResults() {
   body.removeAttribute('aria-label');
   body.setAttribute('aria-busy', 'false');
   body.setAttribute('aria-labelledby', `result-tab-${state.activeResultTab}`);
+  body.dataset.kind = state.activeResultTab === 'plots' ? 'plots' : 'table';
   body.replaceChildren();
   if (state.activeResultTab === 'plots') {
     const wrap = el('div', { class: 'plots' });
@@ -965,11 +1331,53 @@ function renderResults() {
           });
         });
       };
+      const svgAllLabel = el('span', {
+        class: 'btn-label',
+        textContent: 'Download all SVGs',
+      });
+      const svgAllSpinner = el('span', {
+        class: 'spinner spinner-dark',
+        hidden: true,
+      });
+      svgAllSpinner.setAttribute('aria-hidden', 'true');
+      const downloadAllSvg = el('button', {
+        class: 'btn reserve plots-download-all-svg',
+        dataset: { states: 'Download all SVGs|Preparing ZIP' },
+      });
+      downloadAllSvg.type = 'button';
+      downloadAllSvg.disabled = !state.runtimeReady;
+      downloadAllSvg.append(svgAllLabel, svgAllSpinner);
+      downloadAllSvg.onclick = () => {
+        void withPending(
+          downloadAllSvg, svgAllLabel, svgAllSpinner,
+          'Preparing ZIP', 'Download all SVGs',
+          async () => {
+            const bytes = await localBackend.curvesSvgZip();
+            downloadBlob(
+              new Blob([bytes], { type: 'application/zip' }),
+              downloadName(state.filename, '_plots_svg', 'zip'),
+            );
+            toast(`${plotEntries.length} vector plots packaged locally.`);
+          },
+          () => Boolean(state.results) && state.runtimeReady,
+        ).catch(error => {
+          toast(messageFor(error, 'Could not package the vector plots.'), {
+            tone: 'error', timeout: 8000,
+          });
+        });
+      };
       const toolbar = el('div', {
         class: 'plots-toolbar',
-        textContent: 'PNG previews and vector SVG exports are generated locally.',
       });
-      toolbar.append(downloadAll);
+      toolbar.append(
+        el('span', {
+          class: 'plots-toolbar-copy',
+          textContent: 'PNG previews and vector SVG exports are generated locally.',
+        }),
+      );
+      const allActions = el('span', { class: 'plots-toolbar-actions' });
+      allActions.append(downloadAll, downloadAllSvg);
+      toolbar.append(allActions);
       wrap.append(toolbar);
     }
 
@@ -1058,6 +1466,8 @@ function renderResults() {
     body.append(wrap);
     const allButton = $('.plots-download-all', wrap);
     if (allButton) reserveWidth(allButton);
+    const allSvgButton = $('.plots-download-all-svg', wrap);
+    if (allSvgButton) reserveWidth(allSvgButton);
     $$('.plot-download-svg', wrap).forEach(reserveWidth);
   } else {
     body.append(table(d.tables[state.activeResultTab]));

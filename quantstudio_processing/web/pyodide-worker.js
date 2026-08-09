@@ -173,6 +173,12 @@ async function perform(message) {
       value = bytes.buffer;
       transfer.push(bytes.buffer);
       status('ready', 'Curve images ready to download.', 'ready');
+    } else if (op === 'curves-svg-zip') {
+      status('export', 'Packaging vector plots locally…');
+      const bytes = copyPythonBytes(browserApi.svg_plots_zip_bytes());
+      value = bytes.buffer;
+      transfer.push(bytes.buffer);
+      status('ready', 'Vector plots ready to download.', 'ready');
     } else if (op === 'plot-svg') {
       status('export', 'Preparing the vector plot locally…');
       const bytes = copyPythonBytes(browserApi.plot_svg_bytes(payload.name));
