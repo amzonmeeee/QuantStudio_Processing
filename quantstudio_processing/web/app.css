@@ -477,7 +477,36 @@ td.flagcell { color: var(--flag); }
 @media (prefers-reduced-motion: reduce) { .skel-cell { animation: none; } }
 
 .plots { display: flex; flex-direction: column; gap: 14px; }
-.plots img { max-width: 100%; border: 1px solid var(--rule-soft); border-radius: 3px; background: #fff; }
+.plots-toolbar,
+.plot-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+}
+.plots-toolbar {
+  min-height: 31px;
+  color: var(--muted);
+  font-size: 11px;
+}
+.plot {
+  min-width: 0;
+  margin: 0;
+}
+.plot + .plot {
+  padding-top: 14px;
+  border-top: 1px solid var(--rule-soft);
+}
+.plot-head { margin-bottom: 7px; }
+.plot-name { font-size: 12px; font-weight: 600; }
+.plot img {
+  display: block;
+  max-width: 100%;
+  border: 1px solid var(--rule-soft);
+  border-radius: 3px;
+  background: #fff;
+}
 
 /* ----------------------------------------------------------------- pop -- */
 .pop {
@@ -545,4 +574,26 @@ td.flagcell { color: var(--flag); }
   .rail { grid-column: 1; grid-row: 2; }
   .results { grid-column: 1; grid-row: 3; }
   .bar { flex-wrap: wrap; height: auto; padding: 8px 12px; }
+}
+
+@media (max-width: 560px) {
+  .bar-file {
+    width: 100%;
+    max-width: 100%;
+  }
+  .chip-name { max-width: none; }
+  .bar-actions {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+  .plots-toolbar,
+  .plot-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+  .plots-toolbar .btn,
+  .plot-head .btn {
+    align-self: flex-start;
+  }
 }

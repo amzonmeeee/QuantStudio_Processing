@@ -5,6 +5,7 @@ import io
 import json
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 import numpy as np
@@ -48,6 +49,12 @@ def test_static_frontend_uses_the_local_worker_instead_of_http_apis():
     assert "/api/" not in app_source
     assert "fetch(" not in app_source
     assert "new Worker" in (web / "pyodide-client.js").read_text()
+    assert "curvesZip()" in (web / "pyodide-client.js").read_text()
+    assert "browserApi.plots_zip_bytes()" in worker_source
+    assert "browserApi.plot_bytes(name)" in worker_source
+    assert "Download all PNGs" in app_source
+    assert "Download PNG" in app_source
+    assert "el('figure'" in app_source
     for module in (
         "analysis.py",
         "browser.py",
@@ -156,6 +163,8 @@ def test_browser_session_errors_reset_state_and_plots():
     session.plots = {"plate": b"png", "melt": b"melt"}
     session.filename = "stale.xlsx"
 
+    assert session.plot_bytes("plate") == b"png"
+    assert session.plot_bytes("plate") == b"png"
     assert session.take_plot("plate") == b"png"
     with pytest.raises(webcore.UserError, match="no longer available"):
         session.take_plot("plate")
@@ -173,6 +182,33 @@ def test_browser_session_errors_reset_state_and_plots():
     assert session.tables is None
     assert session.plots == {}
     assert session.filename is None
+
+
+def test_browser_packages_all_curve_images_into_a_reusable_zip():
+    session = BrowserSession()
+    session.filename = 'Δ plate?: export.xlsx'
+    session.plots = {
+        "amplification": b"\x89PNG\r\namplification",
+        "melt": b"\x89PNG\r\nmelt",
+        "plate": b"\x89PNG\r\nplate",
+    }
+
+    archive_bytes = session.plots_zip_bytes()
+    assert archive_bytes[:2] == b"PK"
+    assert session.plots == {}
+    assert session.plots_zip_bytes() is archive_bytes
+
+    with zipfile.ZipFile(io.BytesIO(archive_bytes)) as archive:
+        assert archive.namelist() == [
+            "Δ plate_ export_amplification.png",
+            "Δ plate_ export_melt.png",
+            "Δ plate_ export_plate_ct.png",
+        ]
+        assert archive.read("Δ plate_ export_melt.png") == b"\x89PNG\r\nmelt"
+
+    empty = BrowserSession()
+    with pytest.raises(webcore.UserError, match="analysis with plots"):
+        empty.plots_zip_bytes()
 
 
 def test_browser_platemap_yaml_preserves_unicode_and_round_trips():

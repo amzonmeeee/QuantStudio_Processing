@@ -4,10 +4,19 @@ from __future__ import annotations
 import gc
 import io as _io
 import json
+import re
 import sys
+import zipfile
 from pathlib import Path
 
 from . import webcore
+
+
+_PLOT_SUFFIXES = {
+    "amplification": "amplification",
+    "melt": "melt",
+    "plate": "plate_ct",
+}
 
 
 def _json_envelope(*, data=None, error: str | None = None) -> str:
@@ -25,12 +34,14 @@ class BrowserSession:
         self.bundle: dict | None = None
         self.tables: dict | None = None
         self.plots: dict[str, bytes] = {}
+        self.plots_archive: bytes | None = None
         self.filename: str | None = None
 
     def reset(self):
         self.bundle = None
         self.tables = None
         self.plots = {}
+        self.plots_archive = None
         self.filename = None
         plt = sys.modules.get("matplotlib.pyplot")
         if plt is not None:
@@ -58,6 +69,7 @@ class BrowserSession:
     def analyze_json(self, request_json: str) -> str:
         self.tables = None
         self.plots = {}
+        self.plots_archive = None
         if self.bundle is None:
             return _json_envelope(error="Load a workbook before running the analysis.")
         try:
@@ -76,6 +88,40 @@ class BrowserSession:
             return self.plots.pop(name)
         except KeyError as exc:
             raise webcore.UserError(f"Plot {name!r} is no longer available.") from exc
+
+    def plot_bytes(self, name: str) -> bytes:
+        """Return a plot without consuming it so a ZIP can be built later."""
+        try:
+            return self.plots[name]
+        except KeyError as exc:
+            raise webcore.UserError(f"Plot {name!r} is no longer available.") from exc
+
+    def plots_zip_bytes(self) -> bytes:
+        """Package the current PNG plots into one safe, reusable ZIP archive."""
+        if self.plots_archive is not None:
+            return self.plots_archive
+        if not self.plots:
+            raise webcore.UserError(
+                "Run an analysis with plots before downloading plot images."
+            )
+
+        source_stem = Path(self.filename or "quantstudio_export").stem
+        stem = re.sub(r'[\\/:*?"<>|]+', "_", source_stem).strip(" ._")
+        stem = stem or "quantstudio_export"
+        buffer = _io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", compression=zipfile.ZIP_STORED) as archive:
+            for name, data in self.plots.items():
+                suffix = _PLOT_SUFFIXES.get(name)
+                if suffix is None:
+                    suffix = re.sub(r"[^A-Za-z0-9_-]+", "_", name).strip("_")
+                    suffix = suffix or "plot"
+                archive.writestr(f"{stem}_{suffix}.png", data)
+
+        self.plots_archive = buffer.getvalue()
+        # The UI already owns Blob copies of every PNG. Keep only the archive
+        # in Python after it is requested instead of retaining both copies.
+        self.plots = {}
+        return self.plots_archive
 
     def workbook_bytes(self) -> bytes:
         if self.tables is None:
@@ -115,6 +161,14 @@ def analyze_json(request_json: str) -> str:
 
 def take_plot(name: str) -> bytes:
     return _SESSION.take_plot(name)
+
+
+def plot_bytes(name: str) -> bytes:
+    return _SESSION.plot_bytes(name)
+
+
+def plots_zip_bytes() -> bytes:
+    return _SESSION.plots_zip_bytes()
 
 
 def workbook_bytes() -> bytes:

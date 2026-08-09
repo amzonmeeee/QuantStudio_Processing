@@ -156,7 +156,7 @@ async function perform(message) {
       status('analysis', 'Running QC, summaries and plots locally…');
       value = unwrapEnvelope(browserApi.analyze_json(JSON.stringify(payload)));
       for (const name of Object.keys(value.plots || {})) {
-        const bytes = copyPythonBytes(browserApi.take_plot(name));
+        const bytes = copyPythonBytes(browserApi.plot_bytes(name));
         value.plots[name] = bytes.buffer;
         transfer.push(bytes.buffer);
       }
@@ -167,6 +167,12 @@ async function perform(message) {
       value = bytes.buffer;
       transfer.push(bytes.buffer);
       status('ready', 'Workbook ready to download.', 'ready');
+    } else if (op === 'curves-zip') {
+      status('export', 'Packaging curve images locally…');
+      const bytes = copyPythonBytes(browserApi.plots_zip_bytes());
+      value = bytes.buffer;
+      transfer.push(bytes.buffer);
+      status('ready', 'Curve images ready to download.', 'ready');
     } else if (op === 'platemap-yaml') {
       value = unwrapEnvelope(browserApi.platemap_yaml_json(JSON.stringify(payload)));
     } else if (op === 'reset') {

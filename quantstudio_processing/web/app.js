@@ -33,6 +33,7 @@ const state = {
   results: null,
   activeResultTab: null,
   plotUrls: [],
+  plotBlobs: new Map(),
 };
 
 /* ------------------------------------------------------------ press depth */
@@ -129,6 +130,7 @@ function messageFor(error, fallback = 'The local analysis failed.') {
 function releasePlotUrls() {
   for (const url of state.plotUrls) URL.revokeObjectURL(url);
   state.plotUrls = [];
+  state.plotBlobs = new Map();
 }
 
 function clearResults(message = 'Results appear here once you run the analysis.') {
@@ -172,6 +174,9 @@ function updateRuntimeStatus(status) {
   const canRetry = runtimeState === 'error' && status.recoverable !== false;
   $('#btnRuntimeRetry').hidden = !canRetry;
   $('#btnPlateRetry').hidden = !canRetry || !state.loaded;
+  $$('.plots-download-all').forEach(button => {
+    button.disabled = runtimeState !== 'ready';
+  });
 
   if (runtimeState === 'error') {
     $('#btnRun').disabled = true;
@@ -712,8 +717,10 @@ async function runAnalysis() {
   const d = await localBackend.analyze(body);
 
   for (const [name, bytes] of Object.entries(d.plots || {})) {
-    const url = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+    const blob = new Blob([bytes], { type: 'image/png' });
+    const url = URL.createObjectURL(blob);
     state.plotUrls.push(url);
+    state.plotBlobs.set(name, blob);
     d.plots[name] = url;
   }
 
@@ -749,6 +756,23 @@ const TAB_LABEL = {
   standard_curve: 'Standard curve', delta_ct: 'ΔCt', plots: 'Curves',
 };
 
+const PLOT_META = {
+  amplification: { label: 'Amplification curves', suffix: 'amplification' },
+  melt: { label: 'Melt curves', suffix: 'melt' },
+  plate: { label: 'Ct plate heatmap', suffix: 'plate_ct' },
+};
+
+function plotMeta(name) {
+  if (PLOT_META[name]) return PLOT_META[name];
+  const fallback = String(name).replaceAll('_', ' ').trim() || 'Plot';
+  const suffix = String(name).toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'plot';
+  return {
+    label: fallback.replace(/\b\w/g, letter => letter.toUpperCase()),
+    suffix,
+  };
+}
+
 function renderResults() {
   const d = state.results;
   const keys = [...Object.keys(d.tables)];
@@ -772,9 +796,88 @@ function renderResults() {
   body.replaceChildren();
   if (state.activeResultTab === 'plots') {
     const wrap = el('div', { class: 'plots' });
-    for (const [k, src] of Object.entries(d.plots))
-      wrap.append(el('img', { src, alt: `${k} plot` }));
+    const plotEntries = Object.entries(d.plots);
+    if (plotEntries.length > 1) {
+      const label = el('span', {
+        class: 'btn-label',
+        textContent: 'Download all PNGs',
+      });
+      const spinner = el('span', {
+        class: 'spinner spinner-dark',
+        hidden: true,
+      });
+      spinner.setAttribute('aria-hidden', 'true');
+      const downloadAll = el('button', {
+        class: 'btn reserve plots-download-all',
+        dataset: { states: 'Download all PNGs|Preparing ZIP' },
+      });
+      downloadAll.type = 'button';
+      downloadAll.disabled = !state.runtimeReady;
+      downloadAll.append(label, spinner);
+      downloadAll.onclick = () => {
+        void withPending(
+          downloadAll, label, spinner,
+          'Preparing ZIP', 'Download all PNGs',
+          async () => {
+            const bytes = await localBackend.curvesZip();
+            downloadBlob(
+              new Blob([bytes], { type: 'application/zip' }),
+              downloadName(state.filename, '_plots', 'zip'),
+            );
+            toast(`${plotEntries.length} plot images packaged locally.`);
+          },
+          () => Boolean(state.results) && state.runtimeReady,
+        ).catch(error => {
+          toast(messageFor(error, 'Could not package the plot images.'), {
+            tone: 'error', timeout: 8000,
+          });
+        });
+      };
+      const toolbar = el('div', {
+        class: 'plots-toolbar',
+        textContent: 'PNG images generated locally in this browser.',
+      });
+      toolbar.append(downloadAll);
+      wrap.append(toolbar);
+    }
+
+    for (const [name, src] of plotEntries) {
+      const meta = plotMeta(name);
+      const heading = el('span', { class: 'plot-name', textContent: meta.label });
+      const download = el('button', {
+        class: 'btn plot-download',
+        textContent: 'Download PNG',
+      });
+      download.type = 'button';
+      download.setAttribute('aria-label', `Download ${meta.label.toLowerCase()} as PNG`);
+      download.onclick = () => {
+        const blob = state.plotBlobs.get(name);
+        if (!blob) {
+          toast('That curve image is no longer available. Run the analysis again.', {
+            tone: 'error',
+          });
+          return;
+        }
+        downloadBlob(
+          blob,
+          downloadName(state.filename, `_${meta.suffix}`, 'png'),
+        );
+      };
+      const caption = el('figcaption', { class: 'plot-head' });
+      caption.append(heading, download);
+      const figure = el('figure', { class: 'plot' });
+      figure.append(
+        caption,
+        el('img', {
+          src,
+          alt: `${meta.label} generated from the current analysis`,
+        }),
+      );
+      wrap.append(figure);
+    }
     body.append(wrap);
+    const allButton = $('.plots-download-all', wrap);
+    if (allButton) reserveWidth(allButton);
   } else {
     body.append(table(d.tables[state.activeResultTab]));
   }

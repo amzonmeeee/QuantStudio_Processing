@@ -43,7 +43,9 @@ so you have something to work from, and from there:
   export that only used part of a plate can still be laid out the way you ran it.
 - **Copy platemap** puts the painted layout on the clipboard as the same YAML
   the CLI reads, so a layout designed in the GUI becomes a file you can commit.
-- **Download workbook** gives you the processed .xlsx.
+- **Download workbook** gives you the processed `.xlsx`.
+- **Curves** lets you download each generated plot as a PNG or package all
+  available plot images into one ZIP.
 
 Wells with no data in the export are drawn recessed and can't be painted; the
 status line says how many were skipped.

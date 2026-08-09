@@ -135,6 +135,10 @@ export const localBackend = {
     return request('workbook');
   },
 
+  curvesZip() {
+    return request('curves-zip');
+  },
+
   platemapYaml(options) {
     return request('platemap-yaml', options);
   },
