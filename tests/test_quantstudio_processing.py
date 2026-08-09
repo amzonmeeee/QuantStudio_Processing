@@ -1,3 +1,4 @@
+import io as bytes_io
 import subprocess
 import sys
 from pathlib import Path
@@ -8,7 +9,8 @@ import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from quantstudio_processing import analysis, io, platemap as pm  # noqa: E402
+from quantstudio_processing import analysis, io, plot, platemap as pm, webcore  # noqa: E402
+from quantstudio_processing.cli import build_parser  # noqa: E402
 
 HERE = Path(__file__).parent
 SYNTH = HERE / "synthetic_384.xlsx"
@@ -149,6 +151,53 @@ def test_delta_ct_matches_on_sample():
     d = analysis.delta_ct(s, "target", "sample", "a", "b")
     assert d.loc[0, "dct"] == pytest.approx(3.0)
     assert d.loc[0, "fold_2^-dct"] == pytest.approx(0.125)
+
+
+# -------------------------------------------------------------------- plots ---
+def test_curve_exports_are_transparent_by_default_and_can_be_opaque():
+    wells = pd.DataFrame(
+        {
+            "well_position": ["A1"],
+            "target": ["target-a"],
+            "sample": ["sample-a"],
+            "task": ["UNKNOWN"],
+        }
+    )
+    curve_data = pd.DataFrame(
+        {
+            "well_position": ["A1", "A1", "A1"],
+            "cycle": [1, 2, 3],
+            "delta_rn": [0.01, 0.1, 1.0],
+        }
+    )
+
+    transparent = plot.curves(wells, curve_data, "amplification", ncols=1)
+    assert transparent.patch.get_facecolor()[-1] == 0
+    assert all(axis.patch.get_facecolor()[-1] == 0 for axis in transparent.axes)
+    transparent_png, _ = webcore._fig_exports(transparent)
+
+    opaque = plot.curves(
+        wells, curve_data, "amplification", ncols=1, background=True
+    )
+    assert opaque.patch.get_facecolor()[-1] == 1
+    assert all(axis.patch.get_facecolor()[-1] == 1 for axis in opaque.axes)
+    opaque_png, _ = webcore._fig_exports(opaque)
+
+    from matplotlib.image import imread
+
+    transparent_pixels = imread(bytes_io.BytesIO(transparent_png))
+    opaque_pixels = imread(bytes_io.BytesIO(opaque_png))
+    assert transparent_pixels.shape[-1] == 4
+    assert transparent_pixels[..., 3].min() == 0
+    assert opaque_pixels.shape[-1] == 4
+    assert opaque_pixels[..., 3].min() == 1
+
+
+def test_curve_background_cli_option_is_opt_in():
+    assert build_parser().parse_args(["run.xlsx"]).curve_background is False
+    assert build_parser().parse_args(
+        ["run.xlsx", "--curve-background"]
+    ).curve_background is True
 
 
 # --------------------------------------------------------------------- cli ---

@@ -14,9 +14,12 @@ MAX_ASSET_BYTES = 25 * 1024 * 1024
 
 WEB_FILES = (
     "_headers",
+    "OFL-Bricolage.txt",
     "app.css",
     "app.js",
     "favicon.svg",
+    "fonts/LICENSE-Yellowtail.txt",
+    "fonts/yellowtail-regular.ttf",
     "index.html",
     "pyodide-client.js",
     "pyodide-worker.js",

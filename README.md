@@ -53,6 +53,8 @@ so you have something to work from, and from there:
 - **Download workbook** gives you the processed `.xlsx`.
 - **Curves** lets you download each generated plot as a PNG or editable vector
   SVG, or package all available PNG or SVG plots into separate ZIP archives.
+  Curve backgrounds are transparent by default; the Analysis panel can switch
+  amplification and melt exports to white without changing the plate heatmap.
 
 Wells with no data in the export are drawn recessed and can't be painted; the
 status line says how many were skipped.
@@ -63,9 +65,10 @@ clears it from memory. Once a workbook is open, the interface warns before a
 link, reload, back navigation, or tab close can discard that local session. On
 the first visit the browser downloads Pyodide
 v314.0.3 and its scientific packages; plotting is downloaded only when an
-analysis first needs it. Bricolage Grotesque is embedded with its OFL license,
-matching jensen-l.com without a third-party font request; measurements and
-tabular data use the browser's native monospace stack.
+analysis first needs it. Bricolage Grotesque and the Yellowtail wordmark are
+self-hosted with their license files, matching jensen-l.com without a
+third-party font request; measurements and tabular data use the browser's
+native monospace stack.
 
 ## Deploy to Cloudflare Workers
 
@@ -118,8 +121,8 @@ The runtime is pinned to Pyodide v314.0.3 from jsDelivr. Pyodide supplies NumPy,
 pandas, Matplotlib and PyYAML, while `openpyxl==3.1.5` is installed with
 `micropip` from PyPI. A first run therefore needs network access and may take a
 little while; browsers normally cache these immutable downloads for subsequent
-visits. The app's content-security policy permits only those package hosts and
-Google Fonts in addition to the deployed origin.
+visits. The app's content-security policy permits only those package hosts in
+addition to the deployed origin.
 
 ## Command line
 
@@ -175,6 +178,7 @@ than silently producing NaN.
 | `--quantity-col` | numeric input column for the standard curve fit |
 | `--dct TARGET REF` | ΔCt between two assays, matched on sample |
 | `--sc-qc-pass-only` | fit the standard curve on QC-passing wells only |
+| `--curve-background` | give amplification and melt exports a white background (default transparent) |
 | `--ntc-margin`, `--sd-max`, `--ct-min` | QC thresholds |
 | `--no-plots` | skip figures |
 
@@ -188,7 +192,7 @@ wells = platemap.annotate(b["results"], platemap.load_platemap("map.yaml"), b["s
 wells = analysis.qc(wells, assay_col="assay")
 summary = analysis.summarize(wells, ["assay", "sample"])
 fig = plot.curves(wells, b["amplification"], "amplification",
-                  facet_by="assay", colour_by="sample")
+                  facet_by="assay", colour_by="sample", background=False)
 ```
 
 `io.load` reads Results, Sample Setup, Amplification Data and Melt Curve Raw

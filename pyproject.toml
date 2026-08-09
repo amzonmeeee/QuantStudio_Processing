@@ -27,4 +27,4 @@ qsp = "quantstudio_processing.cli:main"
 packages = ["quantstudio_processing"]
 
 [tool.setuptools.package-data]
-quantstudio_processing = ["web/*"]
+quantstudio_processing = ["web/*", "web/fonts/*"]

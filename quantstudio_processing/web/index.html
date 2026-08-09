@@ -199,12 +199,8 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
              aria-label="Plate fields">
           <div class="tabs" id="fieldTabs" role="tablist" aria-label="Plate fields"></div>
         </div>
-        <div class="progressive-blur progressive-blur-top" aria-hidden="true">
-          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-        </div>
-        <div class="progressive-blur progressive-blur-bottom" aria-hidden="true">
-          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-        </div>
+        <div class="scroll-cue scroll-cue-top" aria-hidden="true"></div>
+        <div class="scroll-cue scroll-cue-bottom" aria-hidden="true"></div>
       </div>
       <p class="rail-note" id="fieldNote">Each field becomes a results column. Double-click to rename; remove appears on hover.</p>
     </section>
@@ -219,12 +215,8 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
              aria-label="Values for the selected field">
           <div class="values" id="values" role="tabpanel" tabindex="-1"></div>
         </div>
-        <div class="progressive-blur progressive-blur-top" aria-hidden="true">
-          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-        </div>
-        <div class="progressive-blur progressive-blur-bottom" aria-hidden="true">
-          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-        </div>
+        <div class="scroll-cue scroll-cue-top" aria-hidden="true"></div>
+        <div class="scroll-cue scroll-cue-bottom" aria-hidden="true"></div>
       </div>
       <p class="rail-note">Double-click a value to rename it. Pick one and drag to paint; right-click edits every field in that scope. Alt-drag erases.</p>
     </section>
@@ -260,6 +252,17 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                 <select id="selDctB"></select>
               </label>
             </div>
+            <div class="curve-background-option">
+              <div class="curve-background-copy">
+                <span>Curve background</span>
+                <small>Amplification and melt exports</small>
+              </div>
+              <label class="switch-control" for="optCurveBg">
+                <input type="checkbox" id="optCurveBg">
+                <span class="switch-track" aria-hidden="true"><span></span></span>
+                <span id="curveBgState">Transparent</span>
+              </label>
+            </div>
             <div class="thresholds" id="thresholds">
               <button class="threshold-summary" id="btnThresholds" type="button"
                       aria-expanded="false" aria-controls="thresholdBody">
@@ -281,12 +284,8 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
             </div>
           </div>
         </div>
-        <div class="progressive-blur progressive-blur-top" aria-hidden="true">
-          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-        </div>
-        <div class="progressive-blur progressive-blur-bottom" aria-hidden="true">
-          <i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i>
-        </div>
+        <div class="scroll-cue scroll-cue-top" aria-hidden="true"></div>
+        <div class="scroll-cue scroll-cue-bottom" aria-hidden="true"></div>
       </div>
     </section>
   </aside>

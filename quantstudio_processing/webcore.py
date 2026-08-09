@@ -106,9 +106,21 @@ def _fig_exports(fig) -> tuple[bytes, bytes] | None:
         return None
     png = _io.BytesIO()
     svg = _io.BytesIO()
+    transparent = bool(getattr(fig, "_qsp_transparent", False))
     try:
-        fig.savefig(png, format="png", dpi=140, bbox_inches="tight")
-        fig.savefig(svg, format="svg", bbox_inches="tight")
+        fig.savefig(
+            png,
+            format="png",
+            dpi=140,
+            bbox_inches="tight",
+            transparent=transparent,
+        )
+        fig.savefig(
+            svg,
+            format="svg",
+            bbox_inches="tight",
+            transparent=transparent,
+        )
         return png.getvalue(), svg.getvalue()
     finally:
         import matplotlib.pyplot as plt
@@ -190,6 +202,7 @@ def analyze_bundle(
     )
     sd_max = _nonnegative_option(options, "sd_max", analysis.DEFAULTS["sd_max"])
     ct_min = _nonnegative_option(options, "ct_min", analysis.DEFAULTS["ct_min"])
+    curve_background = bool(options.get("curve_background", False))
 
     wells = analysis.qc(
         wells,
@@ -251,6 +264,7 @@ def analyze_bundle(
                         colour_by=colour,
                         thresholds=thresholds,
                         title=title,
+                        background=curve_background,
                     )
                 )
                 if exports:

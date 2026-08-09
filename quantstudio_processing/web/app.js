@@ -1257,6 +1257,11 @@ $('#selGroup').onchange = e =>
 $('#selDctA').onchange = e => { state.dctA = e.target.value; };
 $('#selDctB').onchange = e => { state.dctB = e.target.value; };
 
+$('#optCurveBg').addEventListener('change', event => {
+  $('#curveBgState').textContent = event.target.checked ? 'White' : 'Transparent';
+  invalidateAnalysis();
+});
+
 $$('.seg-btn').forEach(b => {
   b.onclick = () => {
     const next = Number(b.dataset.format);
@@ -1306,8 +1311,10 @@ async function runAnalysis() {
     ntc_margin: Number($('#optNtc').value),
     sd_max: Number($('#optSd').value),
     ct_min: Number($('#optCtMin').value),
+    curve_background: $('#optCurveBg').checked,
   };
   for (const [key, value] of Object.entries(options)) {
+    if (typeof value !== 'number') continue;
     if (!Number.isFinite(value) || value < 0) {
       const label = key.replaceAll('_', ' ');
       throw new Error(`${label} must be a non-negative number.`);

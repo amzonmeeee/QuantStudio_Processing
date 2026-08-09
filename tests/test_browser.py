@@ -93,10 +93,14 @@ def test_static_frontend_uses_the_local_worker_instead_of_http_apis():
     assert "Starting analyzer…" in index_source
     assert "runtimeStatusLabel" in app_source
     assert "data-scroll-lens" in index_source
-    assert "progressive-blur" in app_css
+    assert "scroll-cue" in app_css
+    assert "progressive-blur" not in app_css
     assert "syncScrollLens" in app_source
+    assert 'id="optCurveBg"' in index_source
+    assert "curve_background: $('#optCurveBg').checked" in app_source
     assert "table-sticky-head" in app_source
     assert "table-sticky-head" in app_css
+    assert "overflow-y: clip" in app_css
     assert "max-height: min(68vh" not in app_css
     assert ".result-body { min-height: 180px; overflow: visible;" in app_css
     for module in (

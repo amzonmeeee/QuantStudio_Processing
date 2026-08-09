@@ -35,6 +35,12 @@ def build_parser():
     p.add_argument("--ct-min", type=float, default=analysis.DEFAULTS["ct_min"])
     p.add_argument("--sc-qc-pass-only", action="store_true",
                    help="fit the standard curve on QC-passing wells only")
+    p.add_argument(
+        "--curve-background",
+        action="store_true",
+        help="give amplification and melt exports a white background "
+             "(default: transparent)",
+    )
     p.add_argument("--no-plots", action="store_true")
     return p
 
@@ -99,9 +105,14 @@ def main(argv=None):
         run = bundle["meta"].get("Experiment Name", args.export.stem)
         for kind, key in (("amplification", "amplification"), ("melt", "melt")):
             fig = plot.curves(wells, bundle[key], kind, facet_by=assay,
-                              colour_by=colour_by, thresholds=thr, title=str(run))
+                              colour_by=colour_by, thresholds=thr, title=str(run),
+                              background=args.curve_background)
             if fig:
-                fig.savefig(args.outdir / f"{kind}.png", dpi=150)
+                fig.savefig(
+                    args.outdir / f"{kind}.png",
+                    dpi=150,
+                    transparent=not args.curve_background,
+                )
         fig = plot.plate_heatmap(wells, "ct", title=f"Ct by well ({bundle['plate_format']}-well)")
         if fig:
             fig.savefig(args.outdir / "plate_ct.png", dpi=150)

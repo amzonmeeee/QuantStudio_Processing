@@ -43,10 +43,13 @@ def _dedup_legend(ax, **kw):
 def curves(wells: pd.DataFrame, data: pd.DataFrame, kind: str,
            facet_by: str = "target", colour_by: str = "sample",
            logy: bool | None = None, ncols: int = 2, ax_width=6.5, ax_height=4.2,
-           thresholds: dict | None = None, title: str | None = None):
+           thresholds: dict | None = None, title: str | None = None,
+           background: bool = False):
     """Amplification or melt curves, one panel per `facet_by` level.
 
     kind: 'amplification' -> delta_rn vs cycle; 'melt' -> derivative vs temperature.
+    Set ``background=True`` for an opaque white figure; the default is
+    transparent so exported curves can sit cleanly on any page.
     """
     if kind == "amplification":
         xcol, ycol, xlabel, ylabel = "cycle", "delta_rn", "Cycle", r"$\Delta$Rn"
@@ -101,6 +104,14 @@ def curves(wells: pd.DataFrame, data: pd.DataFrame, kind: str,
 
     for ax in flat[len(panels):]:
         ax.axis("off")
+    facecolor = "white" if background else "none"
+    fig.patch.set_facecolor(facecolor)
+    for ax in flat:
+        ax.set_facecolor(facecolor)
+    # Export adapters use this marker to pass Matplotlib's explicit
+    # ``transparent`` flag, while direct library users still get transparent
+    # figure and axes patches from an ordinary ``fig.savefig`` call.
+    fig._qsp_transparent = not background
     if title:
         fig.suptitle(title, fontsize=12)
         fig.tight_layout(rect=[0, 0, 1, .96])

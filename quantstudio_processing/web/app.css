@@ -2,6 +2,14 @@
    surface. The plate, not ornamental chrome, is the visual signature. */
 
 @font-face {
+  font-family: "Yellowtail";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("fonts/yellowtail-regular.ttf") format("truetype");
+}
+
+@font-face {
   font-family: "Bricolage Grotesque";
   font-style: normal;
   font-weight: 400 800;
@@ -36,6 +44,7 @@
   --dye-8: #73543a;
 
   --font-display: "Bricolage Grotesque", "PingFang TC", "Microsoft JhengHei", system-ui, sans-serif;
+  --font-wordmark: "Yellowtail", "Brush Script MT", cursive;
   --font-body: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Microsoft JhengHei", sans-serif;
   --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --page: min(1280px, 92vw);
@@ -149,7 +158,6 @@ h1, h2, h3, p { text-wrap: pretty; }
   white-space: nowrap;
 }
 
-.brand,
 .wordmark {
   font-family: var(--font-display);
   letter-spacing: -.02em;
@@ -158,8 +166,12 @@ h1, h2, h3, p { text-wrap: pretty; }
 
 .brand {
   color: var(--ink);
-  font-size: 1.28rem;
-  font-weight: 800;
+  font-family: var(--font-wordmark);
+  font-size: clamp(1.25rem, 3.2vw, 1.7rem);
+  font-synthesis: none;
+  font-weight: 400;
+  letter-spacing: 0;
+  line-height: 1;
   text-decoration: none;
 }
 .brand:hover { color: var(--jade-deep); }
@@ -742,9 +754,8 @@ h1, h2, h3, p { text-wrap: pretty; }
 .value-count { color: var(--muted); font-family: var(--font-mono); font-size: .68rem; font-variant-numeric: tabular-nums; }
 
 /* Editors stay compact until their real content exceeds a useful working
-   height. Only then does the local scroll surface appear. The layered masks
-   progressively increase backdrop blur toward each edge, so continuation is
-   legible without a permanent scrollbar-shaped card. */
+   height. A narrow edge veil then indicates continuation without blurring or
+   obscuring an item. */
 .scroll-lens {
   position: relative;
   min-width: 0;
@@ -769,58 +780,39 @@ h1, h2, h3, p { text-wrap: pretty; }
 .scroll-lens[data-scroll-kind="analysis"] .scroll-lens-viewport { max-height: min(620px, 72svh); }
 .analysis-controls { min-width: 0; padding-bottom: 2px; }
 
-.progressive-blur {
-  --blur-direction: to bottom;
+.scroll-cue {
   position: absolute;
   z-index: 4;
   right: 7px;
   left: 0;
-  height: 30%;
-  min-height: 28px;
-  max-height: 48px;
-  overflow: hidden;
+  height: 22px;
   pointer-events: none;
   opacity: 1;
-  transition: opacity 220ms var(--ease);
+  transition: opacity var(--t) var(--ease);
 }
-.progressive-blur-top { --blur-direction: to top; top: 0; }
-.progressive-blur-bottom { bottom: 0; }
-.progressive-blur i {
+.scroll-cue::after {
   position: absolute;
-  inset: 0;
-  display: block;
-  -webkit-backdrop-filter: blur(var(--blur));
-  backdrop-filter: blur(var(--blur));
-  -webkit-mask-image: linear-gradient(
-    var(--blur-direction),
-    transparent var(--mask-start),
-    #000 var(--mask-in),
-    #000 var(--mask-out),
-    transparent var(--mask-end)
-  );
-  mask-image: linear-gradient(
-    var(--blur-direction),
-    transparent var(--mask-start),
-    #000 var(--mask-in),
-    #000 var(--mask-out),
-    transparent var(--mask-end)
-  );
+  right: calc(50% - 14px);
+  width: 28px;
+  height: 1.5px;
+  border-radius: 999px;
+  background: var(--interactive-line);
+  content: "";
+  opacity: .58;
 }
-.progressive-blur i:nth-child(1) { --blur: .5px; --mask-start: 0%; --mask-in: 12.5%; --mask-out: 25%; --mask-end: 37.5%; }
-.progressive-blur i:nth-child(2) { --blur: 1px; --mask-start: 12.5%; --mask-in: 25%; --mask-out: 37.5%; --mask-end: 50%; }
-.progressive-blur i:nth-child(3) { --blur: 2px; --mask-start: 25%; --mask-in: 37.5%; --mask-out: 50%; --mask-end: 62.5%; }
-.progressive-blur i:nth-child(4) { --blur: 4px; --mask-start: 37.5%; --mask-in: 50%; --mask-out: 62.5%; --mask-end: 75%; }
-.progressive-blur i:nth-child(5) { --blur: 8px; --mask-start: 50%; --mask-in: 62.5%; --mask-out: 75%; --mask-end: 87.5%; }
-.progressive-blur i:nth-child(6) { --blur: 16px; --mask-start: 62.5%; --mask-in: 75%; --mask-out: 87.5%; --mask-end: 100%; }
-.progressive-blur i:nth-child(7) { --blur: 32px; --mask-start: 75%; --mask-in: 87.5%; --mask-out: 100%; --mask-end: 112.5%; }
-.progressive-blur i:nth-child(8) { --blur: 64px; --mask-start: 87.5%; --mask-in: 100%; --mask-out: 100%; --mask-end: 100%; }
-.progressive-blur i:nth-child(8) {
-  -webkit-mask-image: linear-gradient(var(--blur-direction), transparent 87.5%, #000 100%);
-  mask-image: linear-gradient(var(--blur-direction), transparent 87.5%, #000 100%);
+.scroll-cue-top {
+  top: 0;
+  background: linear-gradient(to bottom, var(--paper) 0, rgba(246, 247, 243, .78) 42%, transparent 100%);
 }
-.scroll-lens:not([data-overflow]) .progressive-blur,
-.scroll-lens[data-at-start] .progressive-blur-top,
-.scroll-lens[data-at-end] .progressive-blur-bottom { opacity: 0; }
+.scroll-cue-top::after { top: 3px; }
+.scroll-cue-bottom {
+  bottom: 0;
+  background: linear-gradient(to top, var(--paper) 0, rgba(246, 247, 243, .78) 42%, transparent 100%);
+}
+.scroll-cue-bottom::after { bottom: 3px; }
+.scroll-lens:not([data-overflow]) .scroll-cue,
+.scroll-lens[data-at-start] .scroll-cue-top,
+.scroll-lens[data-at-end] .scroll-cue-bottom { opacity: 0; }
 
 .field { display: flex; flex-direction: column; gap: 5px; margin-top: 12px; }
 .field > span { color: var(--muted); font-size: .68rem; font-weight: 650; }
@@ -881,6 +873,53 @@ h1, h2, h3, p { text-wrap: pretty; }
 .multi-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .field-row { display: flex; gap: 10px; }
 .field-row .field { min-width: 0; flex: 1; }
+.curve-background-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 15px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.curve-background-copy { display: flex; min-width: 0; flex-direction: column; gap: 2px; }
+.curve-background-copy > span { font-size: .74rem; font-weight: 650; }
+.curve-background-copy small { color: var(--muted); font-size: .64rem; line-height: 1.35; }
+.switch-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 34px;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: .68rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.switch-control input { position: absolute; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
+.switch-track {
+  position: relative;
+  width: 32px;
+  height: 18px;
+  flex: 0 0 auto;
+  border: 1.5px solid var(--interactive-line);
+  border-radius: 999px;
+  background: var(--surface);
+  transition: border-color var(--t) var(--ease), background var(--t) var(--ease);
+}
+.switch-track > span {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--interactive-line);
+  transition: transform var(--t) var(--ease), background var(--t) var(--ease);
+}
+.switch-control input:checked + .switch-track { border-color: var(--jade); background: var(--jade-soft); }
+.switch-control input:checked + .switch-track > span { background: var(--jade); transform: translateX(14px); }
+.switch-control input:focus-visible + .switch-track { outline: 2px solid var(--jade); outline-offset: 3px; }
 .thresholds { margin-top: 16px; }
 .threshold-summary {
   display: inline-flex;
@@ -914,9 +953,9 @@ h1, h2, h3, p { text-wrap: pretty; }
   border-top: 1.5px solid var(--line);
   scroll-margin-top: calc(var(--results-top) + 16px);
 }
-.results-heading { display: grid; grid-template-columns: minmax(190px, .34fr) minmax(0, 1fr); gap: 32px; align-items: baseline; margin-bottom: 30px; }
+.results-heading { display: block; margin-bottom: 30px; }
 .results-heading h2 { font-size: 1.75rem; font-weight: 700; }
-.results-heading p { max-width: 52ch; margin: 0; color: var(--muted); font-size: .86rem; }
+.results-heading p { max-width: 52ch; margin: 9px 0 0; color: var(--muted); font-size: .86rem; }
 
 .tabs-result {
   position: sticky;
@@ -945,7 +984,7 @@ th {
 .table-x-scroll {
   max-width: 100%;
   overflow-x: auto;
-  overflow-y: visible;
+  overflow-y: clip;
   overscroll-behavior-inline: contain;
   scrollbar-width: thin;
 }
@@ -989,7 +1028,7 @@ td.flagcell { color: var(--flag); }
 .plot-head { margin-bottom: 14px; }
 .plot-name { font-family: var(--font-display); font-size: 1.08rem; font-weight: 650; }
 .plot-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
-.plot img { display: block; max-width: 100%; background: #fff; }
+.plot img { display: block; max-width: 100%; background: transparent; }
 
 /* Well detail and feedback */
 .pop {
@@ -1134,7 +1173,6 @@ td.flagcell { color: var(--flag); }
   body { font-size: 14px; }
   .bar { position: relative; grid-template-columns: minmax(0, 1fr); grid-template-areas: "brand" "runtime" "file" "actions"; gap: 0; min-height: auto; padding: 18px 0; }
   .brand-lockup { flex-wrap: wrap; white-space: normal; }
-  .brand { font-size: 1.2rem; }
   .wordmark { font-size: .78rem; }
   .runtime-cluster { justify-content: space-between; margin-top: 15px; }
   .runtime-cluster { width: 100%; max-width: none; }
