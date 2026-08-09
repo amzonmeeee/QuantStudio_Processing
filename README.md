@@ -26,6 +26,9 @@ pip install -e .
 
 ## The GUI
 
+Use the hosted app at **[qpcr.jensen-l.com](https://qpcr.jensen-l.com/)**, or
+run it locally:
+
 ```bash
 qsp gui                 # opens http://127.0.0.1:8765
 ```
@@ -204,38 +207,6 @@ is reported rather than hidden inside a mean), and Ct SD above `--sd-max`.
 
 `Undetermined` is kept as NaN and never imputed to the cycle count —
 substituting 40 biases every mean it touches.
-
-## Interface behaviour
-
-The browser UI uses the same paper, ink and jade family as jensen-l.com, then
-translates it into a dense assay ledger: flat rule-separated regions, circular
-wells and restrained controls instead of a generic dashboard of cards. The
-plate remains the visual and operational centre of the page.
-
-The GUI follows [interior.dev](https://www.interior.dev)'s three rules, in plain
-JS rather than React:
-
-- **Nothing reflows on a state change.** The run button measures every label it
-  can reach (`Run analysis` / `Running` / `Run again`) and pins the widest
-  before it needs it, so the toolbar beside it never shifts. Result tables load
-  behind a skeleton whose rows are the height the real rows will be.
-- **Transitions are interruptible.** Everything animates `transform` and
-  `opacity` only, so a change part-way through interpolates from where the
-  element actually is instead of replaying from the start.
-- **Motion is never the only channel.** With `prefers-reduced-motion` on,
-  durations collapse to 1 ms but the same status text, colour and counts still
-  arrive.
-
-Also from that set: press depth on every control, released on pointer cancel as
-well as on a clean click; a spinner that waits 180 ms before appearing and stays
-at least 420 ms once it has; hold-to-confirm on the destructive clear, cancelled
-by releasing early, leaving the button or Escape; a bounded toast stack; and a
-well inspector whose transform origin is the well that opened it.
-
-The plate carries two independent channels at once — fill is your assignment,
-hatching plus a red ring is a QC flag — so neither piece of information hides
-the other. Categorical colours remain limited to well assignments, while jade
-is reserved for interaction and selection across the rest of the interface.
 
 ## Project layout
 
