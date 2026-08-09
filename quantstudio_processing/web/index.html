@@ -4,9 +4,10 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>QuantStudio_Processing</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" media="print" onload="this.media='all'">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
@@ -20,8 +21,13 @@
   </div>
 
   <div class="bar-actions">
+    <span class="local-badge" title="Analysis stays on this device">Local only</span>
     <button class="btn" id="btnYaml" disabled>Copy platemap</button>
-    <button class="btn" id="btnDownload" disabled>Download workbook</button>
+    <button class="btn reserve" id="btnDownload" disabled
+            data-states="Download workbook|Preparing download">
+      <span class="btn-label" id="downloadLabel">Download workbook</span>
+      <span class="spinner spinner-dark" id="downloadSpin" hidden aria-hidden="true"></span>
+    </button>
     <button class="btn btn-primary reserve" id="btnRun" disabled
             data-states="Run analysis|Running|Run again">
       <span class="btn-label" id="runLabel">Run analysis</span>
@@ -39,8 +45,14 @@
         <p class="drop-head">Drop a QuantStudio export here</p>
         <p class="drop-sub">.xlsx from Design &amp; Analysis, 7500 or StepOne software</p>
         <label class="btn btn-quiet">
-          Choose a file<input type="file" id="fileInput" accept=".xlsx,.xls" hidden>
+          Choose a file<input type="file" id="fileInput" accept=".xlsx" hidden>
         </label>
+        <p class="drop-privacy">Your workbook is analysed on this device and never uploaded.</p>
+        <div class="runtime-state" id="runtimeState" data-state="loading" role="status" aria-live="polite">
+          <span class="runtime-dot" aria-hidden="true"></span>
+          <span id="runtimeText">Preparing the local analyzer…</span>
+          <button class="btn btn-mini" id="btnRuntimeRetry" type="button" hidden>Retry</button>
+        </div>
       </div>
     </div>
 
@@ -64,6 +76,7 @@
 
       <div class="plate-foot">
         <p class="status" id="plateStatus" role="status"></p>
+        <button class="btn btn-mini" id="btnPlateRetry" type="button" hidden>Retry analyzer</button>
         <p class="legend-note">Fill is the assignment · hatching is a QC flag · — is Undetermined</p>
       </div>
     </div>
@@ -141,6 +154,6 @@
 
 <div class="toaster" id="toaster" aria-live="polite"></div>
 
-<script src="app.js"></script>
+<script type="module" src="app.js"></script>
 </body>
 </html>

@@ -103,7 +103,20 @@ h2 {
 }
 .chip-meta { font-size: 10px; color: var(--muted); white-space: nowrap; }
 
-.bar-actions { margin-left: auto; display: flex; gap: 6px; }
+.bar-actions { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.local-badge {
+  display: inline-flex;
+  align-items: center;
+  height: 21px;
+  padding: 0 7px;
+  font: 600 9px var(--mono);
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #38632c;
+  background: #edf4e9;
+  border: 1px solid #c8d9c1;
+  border-radius: 999px;
+}
 
 /* --------------------------------------------------------------- button -- */
 .btn {
@@ -152,6 +165,7 @@ h2 {
   border-radius: 50%;
   animation: spin .7s linear infinite;
 }
+.spinner-dark { border-color: rgba(22,26,24,.25); border-top-color: var(--ink); }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) {
   .spinner { animation-duration: 2.4s; }
@@ -195,9 +209,45 @@ h2 {
   transition: background var(--t) var(--ease), border-color var(--t) var(--ease);
 }
 .drop[data-over] { background: #fff; border-color: var(--excite); }
+.drop[data-busy] { border-color: #aeb6b0; }
+.drop[data-busy] .btn-quiet { pointer-events: none; opacity: .42; }
 .drop-inner { text-align: center; }
 .drop-head { margin: 0 0 4px; font-size: 15px; font-weight: 600; }
 .drop-sub { margin: 0 0 14px; font-size: 12px; color: var(--muted); }
+.drop-privacy {
+  margin: 12px 0 0;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--muted);
+}
+.runtime-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  min-height: 23px;
+  margin-top: 8px;
+  font: 500 10px var(--mono);
+  color: var(--muted);
+}
+.runtime-dot {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  border-radius: 50%;
+  background: #aeb6b0;
+}
+.runtime-state[data-state="loading"] .runtime-dot {
+  background: var(--excite);
+  animation: runtime-pulse 1.2s ease-in-out infinite alternate;
+}
+.runtime-state[data-state="ready"] .runtime-dot { background: #5b8b42; }
+.runtime-state[data-state="error"] { color: var(--flag); }
+.runtime-state[data-state="error"] .runtime-dot { background: var(--flag); }
+@keyframes runtime-pulse { to { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) {
+  .runtime-state[data-state="loading"] .runtime-dot { animation: none; }
+}
 
 /* --------------------------------------------------------------- plate -- */
 .plate-head {

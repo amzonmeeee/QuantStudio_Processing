@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import re
 import warnings
-from pathlib import Path
 
 import pandas as pd
 
@@ -169,9 +168,15 @@ def load(path, sheets: tuple[str, ...] = DEFAULT_SHEETS) -> dict:
     multicomponent, meta, plate_format. Sheets not requested, and sheets the
     workbook does not contain, are None.
     """
-    book = open_book(Path(path))
-    out = {k: (read_sheet(book, k) if k in sheets else None) for k in SHEETS}
-    out["meta"] = read_metadata(book)
+    # ``path`` may also be a BytesIO in the browser bridge.  Do not coerce it
+    # to Path, and always close the ExcelFile so repeat loads in a long-lived
+    # Pyodide worker do not retain workbook handles and buffers.
+    book = open_book(path)
+    try:
+        out = {k: (read_sheet(book, k) if k in sheets else None) for k in SHEETS}
+        out["meta"] = read_metadata(book)
+    finally:
+        book.close()
 
     res = out["results"]
     if res is None:

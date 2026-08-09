@@ -181,6 +181,13 @@ def test_web_serves_the_page(client):
     assert b"QuantStudio" in client.get("/").data
 
 
+def test_web_serves_browser_runtime_sources(client):
+    response = client.get("/python/quantstudio_processing/browser.py")
+    assert response.status_code == 200
+    assert b"class BrowserSession" in response.data
+    assert client.get("/python/quantstudio_processing/cli.py").status_code == 404
+
+
 def test_web_load_reports_plate_and_fields(client, synth):
     r = _upload(client, synth)
     assert r.status_code == 200

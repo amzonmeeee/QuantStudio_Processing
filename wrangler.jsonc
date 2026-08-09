@@ -1,7 +1,11 @@
 {
+  "$schema": "node_modules/wrangler/config-schema.json",
   "name": "quantstudio-processing",
   "compatibility_date": "2026-08-06",
+  "build": {
+    "command": "python3 scripts/build_web.py"
+  },
   "assets": {
-    "directory": "./quantstudio_processing/web"
+    "directory": "./dist"
   }
 }

@@ -11,10 +11,10 @@ setup, and the column names drift between software versions. This package deals
 with all of that and gives you a tidy per-well table, QC flags, replicate
 summaries and plots.
 
-Nothing is hard-coded to a plate layout. Plate size (96 / 384 / 1536), which
-column identifies an assay and which identifies a replicate group are all
-either detected or passed in — and in the GUI, the layout in the file is only a
-starting point you can overwrite.
+Nothing in the analysis core is hard-coded to a plate layout. Plate size (96 /
+384 / 1536), which column identifies an assay and which identifies a replicate
+group are all either detected or passed in. The browser GUI supports 96- and
+384-well layouts, using the file's layout as a starting point you can overwrite.
 
 ## Install
 
@@ -48,9 +48,66 @@ so you have something to work from, and from there:
 Wells with no data in the export are drawn recessed and can't be painted; the
 status line says how many were skipped.
 
-The interface asks Google Fonts for Archivo and IBM Plex Mono and falls back to
-system faces on a machine that is offline. Nothing else in the app needs the
-network.
+The hosted interface accepts `.xlsx` exports only. Analysis runs in a dedicated
+Python worker inside your browser: the workbook is never uploaded, and a reload
+clears it from memory. On the first visit the browser downloads Pyodide
+v314.0.3 and its scientific packages; plotting is downloaded only when an
+analysis first needs it. The interface also asks Google Fonts for Archivo and
+IBM Plex Mono, with system-font fallbacks.
+
+## Deploy to Cloudflare Workers
+
+The hosted app is a static Cloudflare Worker deployment. Cloudflare serves the
+HTML, JavaScript and Python source; Pyodide performs workbook parsing, QC,
+plotting and `.xlsx` generation locally in the browser. There is no Flask API,
+server-side session or workbook upload in this deployment.
+
+### Automatic deploys from GitHub
+
+Like the Personal Website repository, automatic deployment is provided by
+Cloudflare Workers Builds rather than a GitHub Actions workflow. Connecting a
+repository is a one-time dashboard setting; adding `wrangler.jsonc` alone does
+not create that connection.
+
+In **Cloudflare Dashboard → Workers & Pages** either import this repository as a
+new Worker, or open the existing `quantstudio-processing` Worker and choose
+**Settings → Builds → Connect**. Use these settings:
+
+| setting | value |
+|---|---|
+| Repository | `amzonmeeee/QuantStudio_Processing` |
+| Production branch | `main` |
+| Root directory | `/` |
+| Build command | `npm run build` |
+| Deploy command | `npx wrangler deploy` |
+| Non-production deploy command | `npx wrangler versions upload` |
+
+The Cloudflare Worker name must be `quantstudio-processing`, matching
+`wrangler.jsonc`. Select **Save and Deploy** once; every later push to `main`
+will then build and promote a new production deployment. See Cloudflare's
+[Workers Builds guide](https://developers.cloudflare.com/workers/ci-cd/builds/)
+for the dashboard flow.
+
+For a manual deployment or local preview:
+
+```bash
+npm install
+npm run build             # creates the ignored dist/ directory
+npx wrangler login        # once per machine
+npm run deploy
+npm run dev               # local Cloudflare preview
+```
+
+Wrangler invokes `scripts/build_web.py` before previewing or deploying; the
+build copies only the browser assets and analysis modules, rejects missing
+inputs and enforces Cloudflare's 25 MiB per-asset limit.
+
+The runtime is pinned to Pyodide v314.0.3 from jsDelivr. Pyodide supplies NumPy,
+pandas, Matplotlib and PyYAML, while `openpyxl==3.1.5` is installed with
+`micropip` from PyPI. A first run therefore needs network access and may take a
+little while; browsers normally cache these immutable downloads for subsequent
+visits. The app's content-security policy permits only those package hosts and
+Google Fonts in addition to the deployed origin.
 
 ## Command line
 
@@ -180,15 +237,20 @@ quantstudio_processing/
   platemap.py   design files and well-range shorthand, both directions
   analysis.py   Ct handling, QC flags, replicate summaries, standard curve, dCt
   plot.py       amplification and melt curves, plate heatmap
+  browser.py    JSON/bytes bridge used by the in-browser Python runtime
+  webcore.py    framework-independent GUI analysis and workbook orchestration
   cli.py        `qsp` and `qsp gui`
-  webapp.py     Flask API over the same functions the CLI calls
-  web/          the GUI: index.html, app.css, app.js
+  webapp.py     local Flask host for the GUI
+  web/          the GUI, Pyodide worker and Cloudflare response headers
+scripts/
+  build_web.py  assembles and validates dist/ for Cloudflare Static Assets
 platemaps/      example design files
 tests/          pytest suite, including a synthetic 384-well export
 ```
 
-The browser never re-implements any analysis: it posts the painted layout and
-renders what `analysis.py` returns.
+The browser never re-implements any analysis in JavaScript: it passes the
+painted layout to the same Python modules in Pyodide and renders what
+`analysis.py` returns.
 
 ## Known limits
 
@@ -201,8 +263,9 @@ renders what `analysis.py` returns.
   well as meaningless.
 - The standard curve is a plain least-squares fit of Ct on log10(quantity); it
   does not weight points or detect saturation, so check `n_flagged`.
-- The GUI holds sessions in memory and binds to localhost. It is a desktop
-  tool, not a server, and it is not built for concurrent users.
+- The browser GUI keeps the current workbook and results only in that tab's
+  memory. Reloading or closing the tab clears them; large workbooks are bounded
+  by the memory available to the browser.
 
 ## Tests
 

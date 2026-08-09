@@ -1,0 +1,200 @@
+"""Focused coverage for the framework-independent browser bridge."""
+from __future__ import annotations
+
+import io
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+import pytest
+import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from quantstudio_processing import io as qsp_io  # noqa: E402
+from quantstudio_processing import platemap as pm  # noqa: E402
+from quantstudio_processing import webcore  # noqa: E402
+from quantstudio_processing.browser import BrowserSession  # noqa: E402
+
+
+HERE = Path(__file__).parent
+SYNTH = HERE / "synthetic_384.xlsx"
+
+
+@pytest.fixture(scope="session")
+def synth_workbook():
+    if not SYNTH.exists():
+        subprocess.run(
+            [sys.executable, str(HERE / "make_synthetic_384.py")], check=True
+        )
+    return SYNTH
+
+
+def _decode_envelope(raw):
+    """Decode the exact text JavaScript receives and enforce strict JSON."""
+    assert "NaN" not in raw
+    assert "Infinity" not in raw
+    return json.loads(raw, parse_constant=lambda value: pytest.fail(value))
+
+
+def test_static_frontend_uses_the_local_worker_instead_of_http_apis():
+    web = Path(__file__).resolve().parents[1] / "quantstudio_processing" / "web"
+    app_source = (web / "app.js").read_text()
+    worker_source = (web / "pyodide-worker.js").read_text()
+
+    assert "/api/" not in app_source
+    assert "fetch(" not in app_source
+    assert "new Worker" in (web / "pyodide-client.js").read_text()
+    for module in (
+        "analysis.py",
+        "browser.py",
+        "io.py",
+        "platemap.py",
+        "plot.py",
+        "webcore.py",
+    ):
+        assert repr(module) in worker_source
+
+
+def test_records_sanitizes_dataframe_scalars_for_strict_json():
+    frame = pd.DataFrame(
+        {
+            "integer": pd.Series([np.int64(7)], dtype=object),
+            "boolean": pd.Series([np.bool_(True)], dtype=object),
+            "nan": [np.nan],
+            "positive_infinity": [np.inf],
+            "negative_infinity": [-np.inf],
+            "missing": [pd.NA],
+        }
+    )
+
+    result = webcore.records(frame)
+
+    assert result["columns"] == list(frame.columns)
+    assert result["rows"] == [[7, True, None, None, None, None]]
+    json.dumps(result, allow_nan=False)
+
+
+def test_io_loads_bytesio_with_the_same_results_as_a_path(synth_workbook):
+    from_path = qsp_io.load(synth_workbook)
+    source = io.BytesIO(synth_workbook.read_bytes())
+
+    from_memory = qsp_io.load(source)
+
+    assert not source.closed
+    assert from_memory["plate_format"] == from_path["plate_format"] == 384
+    assert from_memory["meta"] == from_path["meta"]
+    for key in ("results", "amplification"):
+        pd.testing.assert_frame_equal(from_memory[key], from_path[key])
+
+
+def test_browser_session_analyzes_and_exports_a_workbook(synth_workbook):
+    session = BrowserSession()
+    loaded = _decode_envelope(
+        session.load_bytes(synth_workbook.read_bytes(), "browser input.xlsx")
+    )
+
+    assert loaded["ok"] is True
+    assert loaded["data"]["filename"] == "browser input.xlsx"
+    assert loaded["data"]["plate_format"] == 384
+    assert loaded["data"]["n_wells"] == 384
+
+    analyzed_raw = session.analyze_json(
+        json.dumps(
+            {
+                "fields": {},
+                "assay_col": "target",
+                "group_cols": ["target", "sample"],
+                "quantity_col": None,
+                "skip_plots": True,
+            }
+        )
+    )
+    analyzed = _decode_envelope(analyzed_raw)
+
+    assert analyzed["ok"] is True
+    assert {"per_well", "summary"} <= set(analyzed["data"]["tables"])
+    assert "standard_curve" not in analyzed["data"]["tables"]
+    assert analyzed["data"]["plots"] == {}
+
+    workbook = session.workbook_bytes()
+    assert workbook[:2] == b"PK"
+    with pd.ExcelFile(io.BytesIO(workbook)) as book:
+        assert {"per_well", "summary"} <= set(book.sheet_names)
+        per_well = pd.read_excel(book, sheet_name="per_well")
+    assert len(per_well) == 384
+
+    # A failed rerun must invalidate the previously generated download.
+    failed = _decode_envelope(
+        session.analyze_json(
+            json.dumps({"fields": {}, "assay_col": "not_on_the_plate"})
+        )
+    )
+    assert failed["ok"] is False
+    assert "not_on_the_plate" in failed["error"]
+    assert session.tables is None
+    with pytest.raises(webcore.UserError, match="before downloading"):
+        session.workbook_bytes()
+
+
+def test_browser_session_errors_reset_state_and_plots():
+    session = BrowserSession()
+
+    no_workbook = _decode_envelope(session.analyze_json("{}"))
+    assert no_workbook == {
+        "ok": False,
+        "error": "Load a workbook before running the analysis.",
+    }
+    with pytest.raises(webcore.UserError, match="before downloading"):
+        session.workbook_bytes()
+
+    session.bundle = {"stale": True}
+    session.tables = {"stale": pd.DataFrame()}
+    session.plots = {"plate": b"png", "melt": b"melt"}
+    session.filename = "stale.xlsx"
+
+    assert session.take_plot("plate") == b"png"
+    with pytest.raises(webcore.UserError, match="no longer available"):
+        session.take_plot("plate")
+
+    bad_load = _decode_envelope(session.load_bytes(b"not an xlsx", "broken.xlsx"))
+    assert bad_load["ok"] is False
+    assert "Could not read this export" in bad_load["error"]
+    assert session.bundle is None
+    assert session.tables is None
+    assert session.plots == {}
+    assert session.filename is None
+
+    session.reset()
+    assert session.bundle is None
+    assert session.tables is None
+    assert session.plots == {}
+    assert session.filename is None
+
+
+def test_browser_platemap_yaml_preserves_unicode_and_round_trips():
+    session = BrowserSession()
+    fields = {
+        "assay": {"B2": "äicr", "B3": "äicr", "C2": "äicr", "C3": "äicr"},
+        "sample": {"B2": "δ-sample", "B3": "δ-sample", "C2": "", "C3": None},
+    }
+
+    raw = session.platemap_yaml_json(
+        json.dumps({"fields": fields, "name": "Δ plate"}, ensure_ascii=False)
+    )
+    response = _decode_envelope(raw)
+    document = yaml.safe_load(response["data"]["yaml"])
+
+    assert response["ok"] is True
+    assert document["name"] == "Δ plate"
+    assert sorted(pm.expand_wells(document["assay"]["äicr"])) == [
+        "B2",
+        "B3",
+        "C2",
+        "C3",
+    ]
+    assert sorted(pm.expand_wells(document["sample"]["δ-sample"])) == ["B2", "B3"]
+    assert webcore.processed_filename("run.v2.xlsx") == "run.v2_processed.xlsx"

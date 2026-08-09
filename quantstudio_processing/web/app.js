@@ -9,14 +9,19 @@
  *      status text, colour and count still arrive.
  */
 
+import { localBackend } from './pyodide-client.js';
+
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 
 const DYES = 8;
+const MAX_FILE_BYTES = 50 * 1024 * 1024;
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 const FORMATS = { 96: { rows: 8, cols: 12 }, 384: { rows: 16, cols: 24 } };
 
 const state = {
-  sid: null, filename: null, format: 96,
+  loaded: false, loading: false, runtimeReady: false, sourceFile: null,
+  filename: null, format: 96,
   ct: new Map(),                 // well position -> Ct (or null)
   present: new Set(),            // wells that exist in the export
   fields: new Map(),             // field -> Map(well -> value)
@@ -27,6 +32,7 @@ const state = {
   undo: [],
   results: null,
   activeResultTab: null,
+  plotUrls: [],
 };
 
 /* ------------------------------------------------------------ press depth */
@@ -66,7 +72,9 @@ function reserveWidth(btn) {
    appeared it stays long enough to be read instead of flashing. */
 const SPIN_DELAY = 180, SPIN_MIN = 420;
 
-async function withPending(btn, labelEl, spinEl, busyText, doneText, fn) {
+async function withPending(
+  btn, labelEl, spinEl, busyText, doneText, fn, canEnable = () => true,
+) {
   const idle = labelEl.textContent;
   let shown = 0;
   const timer = setTimeout(() => {
@@ -83,7 +91,7 @@ async function withPending(btn, labelEl, spinEl, busyText, doneText, fn) {
     setTimeout(() => {
       spinEl.hidden = true;
       labelEl.textContent = doneText ?? idle;
-      btn.disabled = false;
+      btn.disabled = !canEnable();
     }, Math.max(0, SPIN_MIN - held));
   }
 }
@@ -113,40 +121,156 @@ function toast(message, { tone = 'info', action, onAction, timeout = 5200 } = {}
   return dismiss;
 }
 
-/* ------------------------------------------------------------------ load */
-async function loadFile(file) {
-  const body = new FormData();
-  body.append('file', file);
-  const r = await fetch('/api/load', { method: 'POST', body });
-  const d = await r.json();
-  if (!r.ok) { toast(d.error, { tone: 'error' }); return; }
+/* --------------------------------------------------------- local runtime */
+function messageFor(error, fallback = 'The local analysis failed.') {
+  return error?.message || fallback;
+}
 
-  state.sid = d.sid;
-  state.filename = d.filename;
-  state.format = FORMATS[d.plate_format] ? d.plate_format : 96;
-  state.ct = new Map(d.wells.map(w => [w.pos, w.ct]));
-  state.present = new Set(d.wells.map(w => w.pos));
-  state.fromFile = d.from_file;
+function releasePlotUrls() {
+  for (const url of state.plotUrls) URL.revokeObjectURL(url);
+  state.plotUrls = [];
+}
+
+function clearResults(message = 'Results appear here once you run the analysis.') {
+  releasePlotUrls();
+  state.results = null;
+  state.activeResultTab = null;
+  state.flags = new Map();
+  $('#resultTabs').replaceChildren();
+  $('#resultBody').replaceChildren(el('p', { class: 'empty', textContent: message }));
+  $('#btnDownload').disabled = true;
+}
+
+function clearLoadedUi() {
+  state.loaded = false;
+  state.sourceFile = null;
+  state.filename = null;
+  state.ct = new Map();
+  state.present = new Set();
+  state.fromFile = {};
   state.fields = new Map();
   state.values = new Map();
   state.flags = new Map();
   state.undo = [];
-  state.results = null;
+  state.activeField = null;
+  state.activeValue = null;
+  $('#fileChip').hidden = true;
+  $('#drop').hidden = false;
+  $('#plateWrap').hidden = true;
+  $('#btnRun').disabled = true;
+  $('#btnYaml').disabled = true;
+  $('#btnPlateRetry').hidden = true;
+  clearResults();
+}
 
-  fillFromFile({ quiet: true });
+function updateRuntimeStatus(status) {
+  const runtime = $('#runtimeState');
+  const runtimeState = status.state || 'loading';
+  state.runtimeReady = runtimeState === 'ready';
+  runtime.dataset.state = runtimeState;
+  $('#runtimeText').textContent = status.message;
+  const canRetry = runtimeState === 'error' && status.recoverable !== false;
+  $('#btnRuntimeRetry').hidden = !canRetry;
+  $('#btnPlateRetry').hidden = !canRetry || !state.loaded;
 
-  $('#chipName').textContent = d.filename;
-  $('#chipMeta').textContent =
-    `${d.n_wells} wells · ${d.plate_format}-well · ${d.instrument || 'unknown instrument'}`;
-  $('#fileChip').hidden = false;
-  $('#drop').hidden = true;
-  $('#plateWrap').hidden = false;
-  $('#btnRun').disabled = false;
-  $('#btnYaml').disabled = false;
-  $('#resultBody').innerHTML = '<p class="empty">Results appear here once you run the analysis.</p>';
+  if (runtimeState === 'error') {
+    $('#btnRun').disabled = true;
+    $('#btnYaml').disabled = true;
+    $('#btnDownload').disabled = true;
+    if (state.loaded) setStatus('The local analyzer stopped. Retry to reload this workbook.');
+  } else if (runtimeState === 'loading' && state.loaded) {
+    setStatus(status.message);
+  }
+}
 
-  renderAll();
-  setStatus(`${d.filename} loaded. ${d.n_wells} wells have data.`);
+localBackend.onStatus(updateRuntimeStatus);
+
+async function prepareRuntime({ restart = false } = {}) {
+  const retryFile = restart ? state.sourceFile : null;
+  $('#btnRuntimeRetry').hidden = true;
+  try {
+    if (restart) await localBackend.restart();
+    else await localBackend.prepare();
+    if (retryFile) await loadFile(retryFile);
+  } catch (error) {
+    toast(messageFor(error, 'Could not start the local analyzer.'), {
+      tone: 'error', timeout: 8000,
+    });
+  }
+}
+
+$('#btnRuntimeRetry').onclick = () => { void prepareRuntime({ restart: true }); };
+$('#btnPlateRetry').onclick = () => { void prepareRuntime({ restart: true }); };
+
+/* ------------------------------------------------------------------ load */
+async function loadFile(file) {
+  if (state.loading) return;
+  if (!/\.xlsx$/i.test(file.name)) {
+    toast('Choose a .xlsx QuantStudio export. Legacy .xls files are not supported.', {
+      tone: 'error',
+    });
+    return;
+  }
+  if (!file.size) {
+    toast('That workbook is empty.', { tone: 'error' });
+    return;
+  }
+  if (file.size > MAX_FILE_BYTES) {
+    toast('That workbook is larger than the 50 MiB browser limit.', {
+      tone: 'error', timeout: 7000,
+    });
+    return;
+  }
+
+  state.loading = true;
+  clearLoadedUi();
+  $('#drop').dataset.busy = '';
+  $('#fileInput').disabled = true;
+  $('#runtimeText').textContent = 'Opening the workbook locally…';
+
+  try {
+    const d = await localBackend.load(file);
+    if (!FORMATS[d.plate_format]) {
+      throw new Error(
+        `This interface supports 96- and 384-well plates, not ${d.plate_format || 'this'}-well plates.`,
+      );
+    }
+
+    state.loaded = true;
+    state.sourceFile = file;
+    state.filename = d.filename;
+    state.format = d.plate_format;
+    state.ct = new Map(d.wells.map(w => [w.pos, w.ct]));
+    state.present = new Set(d.wells.map(w => w.pos));
+    state.fromFile = d.from_file;
+    state.fields = new Map();
+    state.values = new Map();
+    state.flags = new Map();
+    state.undo = [];
+
+    fillFromFile({ quiet: true });
+
+    $('#chipName').textContent = d.filename;
+    $('#chipMeta').textContent =
+      `${d.n_wells} wells · ${d.plate_format}-well · ${d.instrument || 'unknown instrument'}`;
+    $('#fileChip').hidden = false;
+    $('#drop').hidden = true;
+    $('#plateWrap').hidden = false;
+    $('#btnRun').disabled = false;
+    $('#btnYaml').disabled = false;
+
+    renderAll();
+    setStatus(`${d.filename} loaded. ${d.n_wells} wells have data.`);
+  } catch (error) {
+    clearLoadedUi();
+    toast(messageFor(error, 'Could not read that workbook.'), {
+      tone: 'error', timeout: 8000,
+    });
+  } finally {
+    state.loading = false;
+    delete $('#drop').dataset.busy;
+    $('#fileInput').disabled = false;
+  }
 }
 
 function fillFromFile({ quiet = false } = {}) {
@@ -422,9 +546,14 @@ function renderValues() {
 }
 
 $('#btnAddField').onclick = () => {
+  if (!state.loaded) { toast('Load a workbook before editing the plate.'); return; }
   const name = prompt('Name the field (it becomes a column in the results):');
   if (!name) return;
   const key = name.trim();
+  if (key === 'well_position') {
+    toast('“well_position” is reserved for the workbook well address.', { tone: 'error' });
+    return;
+  }
   if (!key || state.fields.has(key)) { toast(`“${key}” is already a field`, { tone: 'error' }); return; }
   const before = snapshotAll();
   state.fields.set(key, new Map());
@@ -436,6 +565,10 @@ $('#btnAddField').onclick = () => {
 };
 
 $('#btnAddValue').onclick = () => {
+  if (!state.loaded || !state.activeField) {
+    toast('Load a workbook before editing the plate.');
+    return;
+  }
   const field = state.activeField;
   const name = prompt(`New value for “${field}”:`);
   if (!name) return;
@@ -530,10 +663,20 @@ $$('.seg-btn').forEach(b => {
 /* ----------------------------------------------------------------- run */
 $('#btnRun').onclick = () => {
   const btn = $('#btnRun');
-  withPending(btn, $('#runLabel'), $('#runSpin'), 'Running', 'Run again', runAnalysis);
+  void withPending(
+    btn, $('#runLabel'), $('#runSpin'), 'Running', 'Run again', runAnalysis,
+    () => state.loaded && state.runtimeReady,
+  ).catch(error => {
+    const message = messageFor(error);
+    clearResults(message);
+    paintAll();
+    setStatus(message);
+    toast(message, { tone: 'error', timeout: 8000 });
+  });
 };
 
 async function runAnalysis() {
+  if (!state.loaded) throw new Error('Load a workbook before running the analysis.');
   const fields = {};
   for (const [f, m] of state.fields) {
     const o = {};
@@ -542,31 +685,36 @@ async function runAnalysis() {
   }
   const dctA = $('#selDctA').value, dctB = $('#selDctB').value;
 
+  const options = {
+    ntc_margin: Number($('#optNtc').value),
+    sd_max: Number($('#optSd').value),
+    ct_min: Number($('#optCtMin').value),
+  };
+  for (const [key, value] of Object.entries(options)) {
+    if (!Number.isFinite(value) || value < 0) {
+      const label = key.replaceAll('_', ' ');
+      throw new Error(`${label} must be a non-negative number.`);
+    }
+  }
+
   const body = {
-    sid: state.sid,
     fields,
     assay_col: $('#selAssay').value,
     group_cols: [...$('#selGroup').selectedOptions].map(o => o.value),
     quantity_col: $('#selQuantity').value === '(none)' ? null : $('#selQuantity').value,
     dct: dctA !== '(none)' && dctB !== '(none)' ? [dctA, dctB] : null,
-    options: {
-      ntc_margin: +$('#optNtc').value,
-      sd_max: +$('#optSd').value,
-      ct_min: +$('#optCtMin').value,
-    },
+    options,
   };
 
+  clearResults();
+  paintAll();
   showSkeleton();
-  const r = await fetch('/api/analyze', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
-  const d = await r.json();
-  if (!r.ok) {
-    $('#resultBody').innerHTML = '';
-    $('#resultBody').append(el('p', { class: 'empty', textContent: d.error }));
-    toast(d.error, { tone: 'error', timeout: 7000 });
-    return;
+  const d = await localBackend.analyze(body);
+
+  for (const [name, bytes] of Object.entries(d.plots || {})) {
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'image/png' }));
+    state.plotUrls.push(url);
+    d.plots[name] = url;
   }
 
   state.results = d;
@@ -666,31 +814,72 @@ function table({ columns, rows }) {
 }
 
 /* ------------------------------------------------------------- exports */
+function downloadName(filename, suffix, extension) {
+  const stem = (filename || 'quantstudio_export')
+    .replace(/\.[^.]+$/, '')
+    .replace(/[\\/:*?"<>|]/g, '_')
+    .trim() || 'quantstudio_export';
+  return `${stem}${suffix}.${extension}`;
+}
+
+function downloadBlob(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = Object.assign(document.createElement('a'), { href: url, download: filename });
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 $('#btnDownload').onclick = () => {
-  if (!state.sid) return;
-  location.href = `/api/download/${state.sid}`;
+  if (!state.results) return;
+  const btn = $('#btnDownload');
+  void withPending(
+    btn, $('#downloadLabel'), $('#downloadSpin'),
+    'Preparing download', 'Download workbook',
+    async () => {
+      const bytes = await localBackend.workbook();
+      downloadBlob(
+        new Blob([bytes], { type: XLSX_MIME }),
+        downloadName(state.filename, '_processed', 'xlsx'),
+      );
+      toast('Processed workbook created locally.');
+    },
+    () => Boolean(state.results) && state.runtimeReady,
+  ).catch(error => {
+    toast(messageFor(error, 'Could not build the workbook.'), {
+      tone: 'error', timeout: 8000,
+    });
+  });
 };
 
 $('#btnYaml').onclick = async () => {
+  const button = $('#btnYaml');
+  button.disabled = true;
   const fields = {};
   for (const [f, m] of state.fields) {
     const o = {};
     for (const [w, v] of m) if (v) o[w] = v;
     if (Object.keys(o).length) fields[f] = o;
   }
-  const r = await fetch('/api/platemap-yaml', {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ fields, name: state.filename }),
-  });
-  const d = await r.json();
-  if (!r.ok) { toast(d.error, { tone: 'error' }); return; }
   try {
-    await navigator.clipboard.writeText(d.yaml);
-    toast('Platemap YAML copied. Save it next to the export and pass it to qsp -m.');
-  } catch {
-    const w = open('', '_blank');
-    w.document.write(`<pre>${d.yaml.replace(/[<&]/g, c => c === '<' ? '&lt;' : '&amp;')}</pre>`);
-    toast('Clipboard blocked — opened the YAML in a new tab instead.');
+    const d = await localBackend.platemapYaml({ fields, name: state.filename });
+    try {
+      await navigator.clipboard.writeText(d.yaml);
+      toast('Platemap YAML copied. Save it next to the export and pass it to qsp -m.');
+    } catch {
+      downloadBlob(
+        new Blob([d.yaml], { type: 'text/yaml;charset=utf-8' }),
+        downloadName(state.filename, '', 'yaml'),
+      );
+      toast('Clipboard access was blocked, so the YAML was downloaded instead.');
+    }
+  } catch (error) {
+    toast(messageFor(error, 'Could not create the platemap YAML.'), {
+      tone: 'error', timeout: 7000,
+    });
+  } finally {
+    button.disabled = !state.loaded || !state.runtimeReady;
   }
 };
 
@@ -737,4 +926,8 @@ function renderAll() {
   if (state.results) renderResults();
 }
 
+window.addEventListener('beforeunload', releasePlotUrls);
+
 reserveWidth($('#btnRun'));
+reserveWidth($('#btnDownload'));
+void prepareRuntime();
