@@ -3,18 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#F6F7F3">
+<meta name="theme-color" content="#E7ECEF">
 <meta name="description" content="A local-first qPCR workspace for QuantStudio exports, plate maps, QC and plots.">
-<title>QuantStudio Processing — Jensen L.</title>
+<title>QuantStudio Processing — Jensen Luo</title>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="app.css">
 </head>
 <body><!--
-THESIS: Jensen's research folio becomes an operational assay ledger; it refuses the compressed grey SaaS dashboard and card grid.
-OWN-WORLD: Paper #F6F7F3, white work surfaces, ink #22282C, jade #157A5B, Bricolage headings, system UI, thin rules, circular wells, and precise data dots.
+THESIS: The Jensen Signal Ledger becomes an operating surface: scientific density is organized by ruled fields and real assay evidence, never ornamental cards.
+OWN-WORLD: Zinc paper #E7ECEF, mineral blue #005A9C, charcoal #11191F, one proof red, Yellowtail signature, Bricolage first-use title, system UI everywhere else, circular wells, and exact rules.
 STORY: Open one local workbook, map its plate, run QC, inspect the evidence, and export without uploading experimental data.
-FIRST VIEWPORT: A calm Jensen-branded bar sits above a two-column opening: direct tool copy and file action at left, a true 8 × 12 plate field at right; after load, the editable plate leads and its ledger controls sit beside it.
-FORM: Assay Ledger, user-pinned direction over grounded candidate 5; seed 273dfed8.
+FIRST VIEWPORT: A paper editorial field meets one lapis assay field: direct tool copy and file action at left, a true 8 × 12 plate with acquisition traces at right; after load, the editable plate leads and its dense ledger controls sit beside it.
+FORM: Signal Ledger / Operate surface; the personal site language translated for laboratory work without its full-screen snapping or display whitespace.
 FINISH: unreviewed and undocumented is unfinished; this build ends with the finish review, the verdict, and DESIGN.md
 -->
 
@@ -22,7 +22,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 
 <header class="bar">
   <div class="brand-lockup">
-    <a class="brand" href="https://jensen-l.com" rel="author">Jensen L.</a>
+    <a class="brand" href="https://jensen-l.com" rel="author">Jensen Luo</a>
     <span class="brand-divider" aria-hidden="true">/</span>
     <span class="wordmark">QuantStudio_Processing</span>
   </div>
@@ -47,7 +47,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
   <div class="bar-actions" aria-label="Workbook actions">
     <div class="replace-workbook">
       <button class="btn btn-quiet" id="btnSelectAnother" type="button">Select another plate</button>
-      <div class="replace-confirm" id="replaceConfirm" role="alertdialog"
+      <div class="replace-confirm" id="replaceConfirm" role="dialog" aria-modal="false"
            aria-labelledby="replaceConfirmTitle" aria-describedby="replaceConfirmText" hidden>
         <div>
           <strong id="replaceConfirmTitle">Replace this plate?</strong>
@@ -84,7 +84,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
         <button class="btn btn-primary file-button" id="btnFilePicker" type="button">
           Choose an .xlsx file
           <svg viewBox="0 0 18 18" aria-hidden="true" focusable="false">
-            <path d="M3 9h10M9.5 5.5 13 9l-3.5 3.5"></path>
+            <path d="M4.5 13.5 13.5 4.5M7 4.5h6.5V11"></path>
           </svg>
         </button>
         <input type="file" id="fileInput" accept=".xlsx" hidden>
@@ -92,10 +92,26 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
       </div>
 
       <figure class="drop-visual">
+        <svg class="drop-signal" viewBox="0 0 600 240" preserveAspectRatio="none" focusable="false" aria-hidden="true">
+          <g class="drop-signal-guides">
+            <path d="M0 204C160 204 205 203 236 190C270 176 279 105 316 61C343 30 391 30 600 30"></path>
+            <path d="M0 212C179 212 220 210 252 197C287 181 296 118 333 74C361 42 409 42 600 42"></path>
+            <path d="M0 220C194 220 237 218 269 205C304 189 314 132 351 88C378 56 427 56 600 56"></path>
+            <path d="M0 228C211 228 254 226 286 213C322 197 332 146 369 102C396 70 445 70 600 70"></path>
+            <path d="M0 236C228 236 271 234 303 221C339 205 350 160 387 116C414 84 463 84 600 84"></path>
+          </g>
+          <g class="drop-signal-draws">
+            <path pathLength="1" d="M0 204C160 204 205 203 236 190C270 176 279 105 316 61C343 30 391 30 600 30"></path>
+            <path pathLength="1" d="M0 212C179 212 220 210 252 197C287 181 296 118 333 74C361 42 409 42 600 42"></path>
+            <path pathLength="1" d="M0 220C194 220 237 218 269 205C304 189 314 132 351 88C378 56 427 56 600 56"></path>
+            <path pathLength="1" d="M0 228C211 228 254 226 286 213C322 197 332 146 369 102C396 70 445 70 600 70"></path>
+            <path pathLength="1" d="M0 236C228 236 271 234 303 221C339 205 350 160 387 116C414 84 463 84 600 84"></path>
+          </g>
+        </svg>
         <svg class="drop-plate" viewBox="0 0 680 440" role="img"
              aria-label="96-well qPCR plate layout"
              aria-describedby="plateIllustrationDesc">
-          <desc id="plateIllustrationDesc">Eight rows and twelve columns of circular wells, with several assigned wells highlighted in jade.</desc>
+          <desc id="plateIllustrationDesc">Eight rows and twelve columns of circular wells, with several assigned wells highlighted in white.</desc>
           <defs>
             <pattern id="wellPattern" x="80" y="68" width="46" height="42" patternUnits="userSpaceOnUse">
               <circle class="plate-well" cx="23" cy="21" r="13"></circle>
@@ -197,7 +213,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
       <div class="scroll-lens" data-scroll-lens data-scroll-kind="fields" data-at-start>
         <div class="scroll-lens-viewport" data-scroll-viewport tabindex="-1"
              aria-label="Plate fields">
-          <div class="tabs" id="fieldTabs" role="tablist" aria-label="Plate fields"></div>
+          <div class="tabs" id="fieldTabs" role="group" aria-label="Plate fields"></div>
         </div>
         <div class="scroll-cue scroll-cue-top" aria-hidden="true"></div>
         <div class="scroll-cue scroll-cue-bottom" aria-hidden="true"></div>
@@ -213,7 +229,7 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
       <div class="scroll-lens" data-scroll-lens data-scroll-kind="values" data-at-start>
         <div class="scroll-lens-viewport" data-scroll-viewport tabindex="-1"
              aria-label="Values for the selected field">
-          <div class="values" id="values" role="tabpanel" tabindex="-1"></div>
+          <div class="values" id="values" role="region" tabindex="-1"></div>
         </div>
         <div class="scroll-cue scroll-cue-top" aria-hidden="true"></div>
         <div class="scroll-cue scroll-cue-bottom" aria-hidden="true"></div>
@@ -233,11 +249,11 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
               <span>Assay field</span>
               <select id="selAssay"></select>
             </label>
-            <label class="field">
-              <span>Replicate keys</span>
-              <div class="multi-picker" id="groupPicker" role="group" aria-label="Replicate keys"></div>
+            <div class="field">
+              <span id="groupPickerLabel">Replicate keys</span>
+              <div class="multi-picker" id="groupPicker" role="group" aria-labelledby="groupPickerLabel"></div>
               <select class="sr-only" id="selGroup" multiple size="3" tabindex="-1" aria-hidden="true"></select>
-            </label>
+            </div>
             <label class="field">
               <span>Input copies field</span>
               <select id="selQuantity"></select>
@@ -254,11 +270,12 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
             </div>
             <div class="curve-background-option">
               <div class="curve-background-copy">
-                <span>Curve background</span>
-                <small>Amplification and melt exports</small>
+                <span id="curveBgLabel">Curve background</span>
+                <small id="curveBgHelp">Amplification and melt exports</small>
               </div>
               <label class="switch-control" for="optCurveBg">
-                <input type="checkbox" id="optCurveBg">
+                <input type="checkbox" id="optCurveBg"
+                       aria-labelledby="curveBgLabel curveBgState" aria-describedby="curveBgHelp">
                 <span class="switch-track" aria-hidden="true"><span></span></span>
                 <span id="curveBgState">Transparent</span>
               </label>
@@ -269,16 +286,17 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
                 <span class="threshold-mark" aria-hidden="true"></span>
                 QC thresholds
               </button>
-              <div class="threshold-body" id="thresholdBody" aria-hidden="true">
+              <div class="threshold-body" id="thresholdBody" aria-hidden="true" inert>
                 <div class="threshold-inner">
                   <div class="field-row">
                     <label class="field"><span>NTC margin</span>
-                      <input type="number" id="optNtc" value="3" step="0.5" min="0"></label>
+                      <input type="number" id="optNtc" value="3" step="0.5" min="0" required></label>
                     <label class="field"><span>Max Ct SD</span>
-                      <input type="number" id="optSd" value="0.5" step="0.1" min="0"></label>
+                      <input type="number" id="optSd" value="0.5" step="0.1" min="0" required></label>
                     <label class="field"><span>Min Ct</span>
-                      <input type="number" id="optCtMin" value="10" step="1" min="0"></label>
+                      <input type="number" id="optCtMin" value="10" step="1" min="0" required></label>
                   </div>
+                  <p id="thresholdError" class="inline-error" role="alert" hidden></p>
                 </div>
               </div>
             </div>

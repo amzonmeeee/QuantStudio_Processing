@@ -1,28 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <style>
-    .background { fill: #F6F7F3; }
-    .plate { fill: none; stroke: #22282C; }
-    .well { fill: #157A5B; }
-    .focus { fill: #22282C; }
-
-    @media (prefers-color-scheme: dark) {
-      .background { fill: #151A1C; }
-      .plate { stroke: #ECF2EE; }
-      .well { fill: #62D6AD; }
-      .focus { fill: #ECF2EE; }
-    }
+    .background { fill: #E7ECEF; }
+    .plate { fill: #005A9C; }
+    .well { fill: #E7ECEF; }
+    .focus { fill: #D64230; }
   </style>
-  <rect class="background" width="32" height="32" rx="7"/>
-  <rect class="plate" x="4" y="4" width="24" height="24" rx="6" stroke-width="1.5"/>
+  <rect class="background" width="32" height="32"/>
+  <path class="plate" d="M4 8 8 4h20v24H4Z"/>
   <g class="well">
-    <circle cx="10" cy="10" r="2.3"/>
-    <circle cx="16" cy="10" r="2.3"/>
-    <circle cx="22" cy="10" r="2.3"/>
-    <circle cx="10" cy="16" r="2.3"/>
-    <circle cx="22" cy="16" r="2.3"/>
-    <circle cx="10" cy="22" r="2.3"/>
-    <circle cx="16" cy="22" r="2.3"/>
-    <circle cx="22" cy="22" r="2.3"/>
+    <circle cx="10" cy="10" r="2"/>
+    <circle cx="16" cy="10" r="2"/>
+    <circle cx="22" cy="10" r="2"/>
+    <circle cx="10" cy="16" r="2"/>
+    <circle cx="22" cy="16" r="2"/>
+    <circle cx="10" cy="22" r="2"/>
+    <circle cx="16" cy="22" r="2"/>
+    <circle cx="22" cy="22" r="2"/>
   </g>
-  <circle class="focus" cx="16" cy="16" r="2.3"/>
+  <circle class="focus" cx="16" cy="16" r="2"/>
 </svg>

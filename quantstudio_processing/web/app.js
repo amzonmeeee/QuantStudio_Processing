@@ -132,12 +132,31 @@ function toast(message, { tone = 'info', action, onAction, timeout = 5200 } = {}
   }
   const stack = $('#toaster');
   // the stack is bounded: a burst of edits should not bury the interface
-  while (stack.children.length >= 3) stack.firstElementChild.remove();
+  while (stack.children.length >= 3) {
+    const removable = [...stack.children]
+      .find(item => !item.contains(document.activeElement));
+    if (!removable) break;
+    removable.remove();
+  }
   stack.append(el);
   requestAnimationFrame(() => el.dataset.open = '');
-  const t = setTimeout(dismiss, timeout);
+  let timer = 0;
+  let dismissed = false;
+  const pause = () => clearTimeout(timer);
+  const schedule = () => {
+    clearTimeout(timer);
+    if (dismissed || el.matches(':hover') || el.contains(document.activeElement)) return;
+    timer = setTimeout(dismiss, timeout);
+  };
+  el.addEventListener('pointerenter', pause);
+  el.addEventListener('pointerleave', schedule);
+  el.addEventListener('focusin', pause);
+  el.addEventListener('focusout', () => setTimeout(schedule));
+  schedule();
   function dismiss() {
-    clearTimeout(t);
+    if (dismissed) return;
+    dismissed = true;
+    clearTimeout(timer);
     delete el.dataset.open;
     setTimeout(() => el.remove(), 200);
   }
@@ -489,7 +508,9 @@ function undo() {
 }
 
 document.addEventListener('keydown', e => {
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+  const editingText = e.target instanceof Element
+    && Boolean(e.target.closest('input, textarea, select, [contenteditable="true"]'));
+  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'z' && !e.shiftKey && !editingText) {
     e.preventDefault(); undo();
   }
   if (e.key === 'Escape') {
@@ -510,13 +531,14 @@ function renderPlate() {
   // should still look like a plate, not fill the window
   const cap = COARSE_POINTER ? 44 : state.format === 384 ? 26 : 44;
   const header = COARSE_POINTER ? 44 : 18;
-  plate.style.gridTemplateColumns = `${header}px repeat(${cols}, minmax(0, ${cap}px))`;
+  plate.style.gridTemplateColumns = `${header}px repeat(${cols}, ${cap}px)`;
   plate.replaceChildren();
 
   plate.append(el('div'));
   for (let c = 1; c <= cols; c++) {
     const header = el('button', { class: 'hdr', textContent: c, dataset: { col: c } });
     header.type = 'button';
+    header.tabIndex = c === 1 ? 0 : -1;
     header.setAttribute('aria-label', `Paint column ${c}. Right-click or Shift+Enter to edit all properties.`);
     plate.append(header);
   }
@@ -525,12 +547,14 @@ function renderPlate() {
     const letter = String.fromCharCode(65 + r);
     const header = el('button', { class: 'hdr', textContent: letter, dataset: { row: letter } });
     header.type = 'button';
+    header.tabIndex = r === 0 ? 0 : -1;
     header.setAttribute('aria-label', `Paint row ${letter}. Right-click or Shift+Enter to edit all properties.`);
     plate.append(header);
     for (let c = 1; c <= cols; c++) {
       const pos = letter + c;
       const w = el('button', { class: 'well', dataset: { pos } });
       w.type = 'button';
+      w.tabIndex = -1;
       plate.append(w);
     }
   }
@@ -562,10 +586,15 @@ function colourOf(field, value) {
 function paintAll() {
   const field = state.activeField;
   const map = state.fields.get(field) || new Map();
-  for (const w of $$('.well', $('#plate'))) {
+  const wells = $$('.well', $('#plate'));
+  let roving = wells.find(w => w.tabIndex === 0 && state.present.has(w.dataset.pos));
+  roving ||= wells.find(w => state.present.has(w.dataset.pos));
+  for (const w of wells) {
     const pos = w.dataset.pos;
     const has = state.present.has(pos);
     toggleAttr(w, 'data-empty', !has);
+    w.disabled = !has;
+    w.tabIndex = has && w === roving ? 0 : -1;
     const v = map.get(pos);
     toggleAttr(w, 'data-assigned', !!v);
     w.style.background = v ? colourOf(field, v) : '';
@@ -704,9 +733,64 @@ $('#plate').addEventListener('click', e => {
 });
 $('#plate').addEventListener('keydown', e => {
   const target = e.target.closest('.well, .hdr');
-  if (!target || e.key !== 'Enter' || !e.shiftKey) return;
+  if (!target) return;
+  if (e.key === 'Enter' && e.shiftKey) {
+    e.preventDefault();
+    openPop(target);
+    return;
+  }
+  if (target.classList.contains('hdr')) {
+    const headers = target.dataset.col
+      ? $$('.hdr[data-col]', $('#plate'))
+      : $$('.hdr[data-row]', $('#plate'));
+    const step = target.dataset.col
+      ? { ArrowLeft: -1, ArrowRight: 1 }[e.key]
+      : { ArrowUp: -1, ArrowDown: 1 }[e.key];
+    if (!step) return;
+    e.preventDefault();
+    const next = headers[headers.indexOf(target) + step];
+    if (!next) return;
+    target.tabIndex = -1;
+    next.tabIndex = 0;
+    next.focus({ preventScroll: true });
+    next.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+    return;
+  }
+  if (!target.classList.contains('well') || !e.key.startsWith('Arrow')) return;
+  const { rows, cols } = FORMATS[state.format];
+  const match = target.dataset.pos.match(/^([A-Z])(\d+)$/);
+  if (!match) return;
+  const delta = {
+    ArrowLeft: [0, -1], ArrowRight: [0, 1], ArrowUp: [-1, 0], ArrowDown: [1, 0],
+  }[e.key];
+  if (!delta) return;
   e.preventDefault();
-  openPop(target);
+  let row = match[1].charCodeAt(0) - 65;
+  let col = Number(match[2]) - 1;
+  do {
+    row += delta[0];
+    col += delta[1];
+    if (row < 0 || row >= rows || col < 0 || col >= cols) return;
+  } while (!state.present.has(`${String.fromCharCode(65 + row)}${col + 1}`));
+  const next = $(`.well[data-pos="${String.fromCharCode(65 + row)}${col + 1}"]`);
+  if (!next) return;
+  target.tabIndex = -1;
+  next.tabIndex = 0;
+  next.focus({ preventScroll: true });
+  next.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+});
+$('#plate').addEventListener('focusin', e => {
+  const header = e.target.closest('.hdr');
+  if (header) {
+    const selector = header.dataset.col ? '.hdr[data-col][tabindex="0"]' : '.hdr[data-row][tabindex="0"]';
+    $$(selector, $('#plate')).forEach(item => { if (item !== header) item.tabIndex = -1; });
+    header.tabIndex = 0;
+    return;
+  }
+  const well = e.target.closest('.well:not(:disabled)');
+  if (!well) return;
+  $$('.well[tabindex="0"]', $('#plate')).forEach(item => { if (item !== well) item.tabIndex = -1; });
+  well.tabIndex = 0;
 });
 $('#plate').addEventListener('contextmenu', e => {
   const target = e.target.closest('.well, .hdr');
@@ -863,14 +947,20 @@ document.addEventListener('pointerdown', e => {
 
 /* ------------------------------------------------------- fields & values */
 function editorError(form, message) {
+  const input = $('.inline-input', form);
   let error = $('.inline-error', form);
   if (!error) {
     error = el('span', { class: 'inline-error' });
+    error.id = `inline-error-${++editorErrorSequence}`;
     error.setAttribute('role', 'alert');
     form.append(error);
   }
   error.textContent = message;
+  input?.setAttribute('aria-invalid', 'true');
+  if (input) input.setAttribute('aria-describedby', error.id);
 }
+
+let editorErrorSequence = 0;
 
 function replaceMapKey(source, oldKey, newKey) {
   return new Map([...source].map(([key, value]) => [key === oldKey ? newKey : key, value]));
@@ -886,6 +976,11 @@ function makeEditor({ kind, current = '', onSave, onCancel }) {
   input.type = 'text';
   input.autocomplete = 'off';
   input.setAttribute('aria-label', `${current ? 'Edit' : 'New'} ${kind}`);
+  input.addEventListener('input', () => {
+    input.removeAttribute('aria-invalid');
+    input.removeAttribute('aria-describedby');
+    $('.inline-error', form)?.remove();
+  });
   const controls = el('span', { class: 'inline-actions' });
   const save = el('button', { class: 'btn btn-mini btn-primary', textContent: current ? 'Save' : 'Add' });
   save.type = 'submit';
@@ -981,7 +1076,6 @@ function fieldEditorNode() {
       invalidateAnalysis();
       pushUndo(before, `${original ? 'Renamed' : 'Added'} the field “${name}”`);
       renderAll();
-      animatePanel($('#fieldTabs'));
     },
   });
 }
@@ -1003,7 +1097,6 @@ function deleteField(field) {
   invalidateAnalysis();
   pushUndo(before, `Deleted the field “${field}”`);
   renderAll();
-  animatePanel($('#fieldTabs'));
 }
 
 function renderFields() {
@@ -1016,17 +1109,14 @@ function renderFields() {
     const b = el('button', { class: 'tab', textContent: field });
     b.type = 'button';
     b.id = `field-tab-${index++}`;
-    b.setAttribute('role', 'tab');
     b.setAttribute('aria-controls', 'values');
-    b.setAttribute('aria-selected', String(field === state.activeField));
+    b.setAttribute('aria-pressed', String(field === state.activeField));
     b.tabIndex = field === state.activeField ? 0 : -1;
     const selectField = () => {
       state.activeField = field;
       state.activeValue = (state.values.get(field) || [])[0] ?? null;
       valueEditor = null;
       renderAll();
-      animatePanel($('#values'), { x: 7, y: 0 });
-      animatePanel($('#plate'), { y: 3 });
     };
     const editField = () => {
       state.activeField = field;
@@ -1045,7 +1135,7 @@ function renderFields() {
     if (fieldEditor?.original === field) tabs.append(fieldEditorNode());
   }
   if (fieldEditor && !fieldEditor.original) tabs.append(fieldEditorNode());
-  const selected = $('.tab[aria-selected="true"]', tabs);
+  const selected = $('.tab[aria-pressed="true"]', tabs);
   if (selected) $('#values').setAttribute('aria-labelledby', selected.id);
 }
 
@@ -1079,7 +1169,6 @@ function valueEditorNode(value = null) {
       pushUndo(before, `${value ? 'Renamed' : 'Added'} “${name}”`);
       paintAll();
       syncSelects();
-      animatePanel($('#values'));
     },
   });
 }
@@ -1097,7 +1186,6 @@ function deleteValue(field, value) {
   pushUndo(before, `Deleted “${value}” and cleared ${count} assignment${count === 1 ? '' : 's'}`);
   paintAll();
   syncSelects();
-  animatePanel($('#values'));
 }
 
 function renderValues() {
@@ -1236,7 +1324,6 @@ function renderGroupPicker() {
       option.selected = !option.selected;
       state.groupCols = [...select.selectedOptions].map(item => item.value);
       renderGroupPicker();
-      animatePanel(picker, { x: 4, y: 0 });
     };
     picker.append(button);
   }
@@ -1278,7 +1365,9 @@ $('#btnThresholds').onclick = () => {
   const button = $('#btnThresholds');
   const open = button.getAttribute('aria-expanded') !== 'true';
   button.setAttribute('aria-expanded', String(open));
-  $('#thresholdBody').setAttribute('aria-hidden', String(!open));
+  const body = $('#thresholdBody');
+  body.setAttribute('aria-hidden', String(!open));
+  body.inert = !open;
   $('#thresholds').toggleAttribute('data-open', open);
 };
 
@@ -1307,19 +1396,44 @@ async function runAnalysis() {
   }
   const dctA = $('#selDctA').value, dctB = $('#selDctB').value;
 
+  const thresholdError = $('#thresholdError');
+  const thresholdInputs = [
+    ['#optNtc', 'NTC margin'],
+    ['#optSd', 'Max Ct SD'],
+    ['#optCtMin', 'Min Ct'],
+  ];
+  thresholdError.hidden = true;
+  thresholdError.textContent = '';
+  thresholdInputs.forEach(([selector]) => {
+    const input = $(selector);
+    input.removeAttribute('aria-invalid');
+    input.removeAttribute('aria-describedby');
+  });
+  const invalidThreshold = thresholdInputs.find(([selector]) => {
+    const value = $(selector).valueAsNumber;
+    return !Number.isFinite(value) || value < 0;
+  });
+  if (invalidThreshold) {
+    const [selector, label] = invalidThreshold;
+    const input = $(selector);
+    if ($('#btnThresholds').getAttribute('aria-expanded') !== 'true') {
+      $('#btnThresholds').click();
+    }
+    const message = `${label} must be a non-negative number.`;
+    input.setAttribute('aria-invalid', 'true');
+    input.setAttribute('aria-describedby', 'thresholdError');
+    thresholdError.textContent = message;
+    thresholdError.hidden = false;
+    input.focus();
+    throw new Error(message);
+  }
+
   const options = {
-    ntc_margin: Number($('#optNtc').value),
-    sd_max: Number($('#optSd').value),
-    ct_min: Number($('#optCtMin').value),
+    ntc_margin: $('#optNtc').valueAsNumber,
+    sd_max: $('#optSd').valueAsNumber,
+    ct_min: $('#optCtMin').valueAsNumber,
     curve_background: $('#optCurveBg').checked,
   };
-  for (const [key, value] of Object.entries(options)) {
-    if (typeof value !== 'number') continue;
-    if (!Number.isFinite(value) || value < 0) {
-      const label = key.replaceAll('_', ' ');
-      throw new Error(`${label} must be a non-negative number.`);
-    }
-  }
 
   const body = {
     fields,
@@ -1622,10 +1736,11 @@ function renderResults() {
 }
 
 function moveTabFocus(event) {
-  const tab = event.target.closest('[role="tab"]');
-  if (!tab) return;
   const list = event.currentTarget;
-  const tabs = $$('[role="tab"]', list);
+  const selector = list.id === 'fieldTabs' ? '.tab' : '[role="tab"]';
+  const tab = event.target.closest(selector);
+  if (!tab) return;
+  const tabs = $$(selector, list);
   const current = tabs.indexOf(tab);
   let next = null;
   if (event.key === 'ArrowRight') next = tabs[(current + 1) % tabs.length];
@@ -1637,7 +1752,10 @@ function moveTabFocus(event) {
   next.focus();
   next.click();
   requestAnimationFrame(() => {
-    $('[role="tab"][aria-selected="true"]', list)?.focus();
+    const selectedSelector = list.id === 'fieldTabs'
+      ? '.tab[aria-pressed="true"]'
+      : '[role="tab"][aria-selected="true"]';
+    $(selectedSelector, list)?.focus();
   });
 }
 
@@ -1706,28 +1824,35 @@ function table({ columns, rows }) {
   const region = el('div', { class: 'table-region' });
   region.append(sticky, scroller);
 
-  const syncHeader = () => {
+  let headerFrame = 0;
+  const syncHeaderX = () => {
+    cancelAnimationFrame(headerFrame);
+    headerFrame = requestAnimationFrame(() => {
+      headerFrame = 0;
+      if (stickyTrack.isConnected) {
+        stickyTrack.style.transform = `translateX(${-scroller.scrollLeft}px)`;
+      }
+    });
+  };
+  const measureHeader = () => {
     if (!t.isConnected) return;
     const cells = $$('th', thead);
     const tableWidth = Math.ceil(t.getBoundingClientRect().width);
-    copyCols.forEach((column, index) => {
-      column.style.width = `${cells[index].getBoundingClientRect().width}px`;
-    });
+    const widths = cells.map(cell => cell.getBoundingClientRect().width);
+    const headHeight = Math.ceil(thead.getBoundingClientRect().height);
+    copyCols.forEach((column, index) => { column.style.width = `${widths[index]}px`; });
     copyTable.style.width = `${tableWidth}px`;
     stickyTrack.style.width = `${tableWidth}px`;
-    sticky.style.setProperty(
-      '--table-head-height',
-      `${Math.ceil(thead.getBoundingClientRect().height)}px`,
-    );
-    stickyTrack.style.transform = `translateX(${-scroller.scrollLeft}px)`;
+    sticky.style.setProperty('--table-head-height', `${headHeight}px`);
+    syncHeaderX();
   };
-  scroller.addEventListener('scroll', syncHeader, { passive: true });
+  scroller.addEventListener('scroll', syncHeaderX, { passive: true });
   if ('ResizeObserver' in window) {
-    resultTableObserver = new ResizeObserver(syncHeader);
+    resultTableObserver = new ResizeObserver(measureHeader);
     resultTableObserver.observe(scroller);
     resultTableObserver.observe(t);
   }
-  requestAnimationFrame(syncHeader);
+  requestAnimationFrame(measureHeader);
   return region;
 }
 
