@@ -43,8 +43,6 @@
   --flag-hover: #e5b2ad;
   --plot-paper: #f2f5f6;
   --plot-line: rgba(17, 25, 31, .2);
-  --alpha-preview-a: #f2f5f6;
-  --alpha-preview-b: #d8e0e5;
 
   --dye-1: #19769d;
   --dye-2: #4f7d35;
@@ -197,8 +195,8 @@ h1, h2, h3, p { text-wrap: pretty; }
 }
 .skip-link:focus-visible { color: var(--ink); transform: translateY(0); }
 
-/* Theme changes use the same edition timing as jensen-l.com. Scientific
-   plots remain on fixed light evidence paper in either surrounding theme. */
+/* Theme changes use the same edition timing as jensen-l.com. Opaque
+   scientific plots remain on fixed light evidence paper. */
 ::view-transition-old(root),
 ::view-transition-new(root),
 ::view-transition-old(app-header),
@@ -1313,13 +1311,8 @@ td.flagcell { color: var(--flag); }
   color-scheme: light;
 }
 .plot[data-export-background="transparent"] img {
-  background:
-    conic-gradient(
-      var(--alpha-preview-b) 25%,
-      var(--alpha-preview-a) 0 50%,
-      var(--alpha-preview-b) 0 75%,
-      var(--alpha-preview-a) 0
-    ) 0 0 / 16px 16px;
+  border-color: var(--line);
+  background: transparent;
 }
 
 /* Well detail and feedback */
@@ -1457,11 +1450,27 @@ td.flagcell { color: var(--flag); }
   .context-hint { max-width: 260px; }
 }
 
+@media (min-width: 841px) {
+  .drop-visual { place-items: center; }
+  .drop-plate {
+    width: min(100%, 38rem);
+    justify-self: center;
+    translate: 0 -3%;
+  }
+  .drop-visual figcaption {
+    position: absolute;
+    inset-inline: clamp(2rem, 4vw, 4.75rem);
+    bottom: clamp(2rem, 4vw, 4.75rem);
+    margin: 0;
+  }
+}
+
 @media (max-width: 840px) {
   .drop { grid-template-columns: minmax(0, 1fr); min-height: auto; padding: 0; }
   .drop-copy { max-width: 660px; padding: 64px 0 58px; }
   .drop-copy h1 { font-size: clamp(3.25rem, 12vw, 5rem); }
   .drop-visual { width: 100%; max-width: none; min-height: 30rem; padding: clamp(1.5rem, 6vw, 3.5rem); }
+  .drop-plate { width: min(100%, 36rem); justify-self: center; }
   .plate-wrap { display: block; padding-top: 42px; }
   .plate-foot {
     align-items: flex-start;

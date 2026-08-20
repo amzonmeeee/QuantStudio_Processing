@@ -38,7 +38,7 @@ This is the Operate surface, not another editorial chapter. It does not inherit 
 - The eight dye tokens remain categorical data colors and must not be collapsed into the brand blue.
 - Red is functional: focus, QC, errors, and destructive actions. It is never an ornamental accent or an assignment color.
 - QC keeps both the red inset and hatch so color is not its only signal.
-- The shell follows System, Light, or Dark. Opaque plots sit on fixed light evidence paper. Transparent curve previews use a fixed light alpha checkerboard so their alpha is explicit and their dark marks remain legible in every shell theme.
+- The shell follows System, Light, or Dark. Opaque plots sit on fixed light evidence paper. Transparent curve previews composite directly against the current shell, matching the alpha in their exports.
 
 ## Composition
 
@@ -93,5 +93,5 @@ Fields, values, and ordinary content do not receive generic fade-up animation. R
 - Do not use proof or flag red for plate assignments.
 - Do not replace circular wells or categorical dye colors with brand styling.
 - Do not hide core Fields, Values, or Analysis controls in a new navigation shell.
-- Do not theme scientific evidence itself dark; opaque plots and transparency previews remain on fixed light evidence surfaces until their generated marks support both palettes explicitly.
+- Do not theme opaque scientific evidence itself dark; transparent previews intentionally reveal the current shell instead of adding a backing surface.
 - Do not sacrifice 96/384 density, sticky results, local-only guarantees, text status, keyboard operation, or reduced-motion fallback for visual consistency.

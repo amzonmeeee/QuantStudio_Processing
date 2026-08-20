@@ -104,6 +104,10 @@ def test_static_frontend_uses_the_local_worker_instead_of_http_apis():
     assert "curve_background: $('#optCurveBg').checked" in app_source
     assert "dataset: { exportBackground }" in app_source
     assert '.plot[data-export-background="transparent"] img' in app_css
+    transparent_plot_css = app_css.split('.plot[data-export-background="transparent"] img {', 1)[1].split("}", 1)[0]
+    assert "background: transparent" in transparent_plot_css
+    assert "--alpha-preview-" not in app_css
+    assert "conic-gradient" not in transparent_plot_css
     assert "table-sticky-head" in app_source
     assert "table-sticky-head" in app_css
     assert "overflow-y: clip" in app_css
