@@ -22,7 +22,7 @@ rounded:
 
 The product belongs to the same Signal Ledger family as Jensen Luo's personal site: cool zinc paper, charcoal ink, mineral blue, square rules, a Yellowtail signature, a restrained Bricolage display face, and motion derived from real biological signal.
 
-This is the Operate surface, not another editorial chapter. It does not inherit full-screen snapping, large display whitespace, dark mode, or section entrance effects. Dense scientific state and familiar controls take priority.
+This is the Operate surface, not another editorial chapter. It does not inherit full-screen snapping, large display whitespace, or section entrance effects. Dense scientific state and familiar controls take priority. It does inherit the site's System / Light / Dark edition control and 800 ms edition change.
 
 ## Type
 
@@ -38,7 +38,7 @@ This is the Operate surface, not another editorial chapter. It does not inherit 
 - The eight dye tokens remain categorical data colors and must not be collapsed into the brand blue.
 - Red is functional: focus, QC, errors, and destructive actions. It is never an ornamental accent or an assignment color.
 - QC keeps both the red inset and hatch so color is not its only signal.
-- The app stays light because transparent scientific plots contain dark marks and must remain legible.
+- The shell follows System, Light, or Dark. Scientific plots always sit on a fixed light evidence surface because their generated marks are authored for light paper and must remain legible in every shell theme.
 
 ## Composition
 
@@ -55,6 +55,7 @@ The 96/384 plate geometry, circular wells, row and column headers, horizontal pa
 ## Interaction language
 
 - Every link, enabled button, switch, well, and plate header responds within 90ms using opacity and one-pixel registration. Nothing lifts or gains a shadow.
+- The three-position theme rail uses the same icons, state model, persisted preference, and edition timing as jensen-l.com.
 - Hover changes border or ink contrast. Press, hover, selection, focus, pending, and disabled remain separate states.
 - Focus uses a two-pixel vermilion outline. Lapis controls keep enough offset for the ring to remain visible.
 - Plate wells use one roving tab stop and arrow-key navigation; empty wells are disabled.
@@ -68,6 +69,7 @@ The 96/384 plate geometry, circular wells, row and column headers, horizontal pa
 Motion explains a state or relationship:
 
 - qPCR curves register the assay on first use;
+- shell themes change as one coordinated 800 ms edition, while the masthead remains visually anchored;
 - the 96/384 plate shifts in the direction of the selected format;
 - result panes follow result-tab direction;
 - disclosures, dialogs, spinners, and runtime indicators communicate active work.
@@ -76,8 +78,8 @@ Fields, values, and ordinary content do not receive generic fade-up animation. R
 
 ## Responsive rules
 
-- Wide screens keep loaded workbook actions in one compact masthead row when they fit.
-- Below 1280px, actions receive their own ruled row rather than squeezing labels.
+- Wide screens use a shared brand/runtime/theme masthead and a separate, ruled workbook-action row that only exists after load.
+- Below 1280px, action spacing tightens without mixing workbook state into the brand row.
 - Below 1120px, the design rail follows the plate in source order.
 - Below 840px, the first-use halves stack and the plate status ledger returns below the plate.
 - Below 680px, ordinary controls provide at least 44px targets; the plate remains horizontally scrollable rather than shrinking the wells.
@@ -91,5 +93,5 @@ Fields, values, and ordinary content do not receive generic fade-up animation. R
 - Do not use proof or flag red for plate assignments.
 - Do not replace circular wells or categorical dye colors with brand styling.
 - Do not hide core Fields, Values, or Analysis controls in a new navigation shell.
-- Do not add dark mode until plot generation and every evidence surface explicitly support it.
+- Do not theme scientific evidence itself dark; plots remain on fixed light paper until their generated marks support both palettes explicitly.
 - Do not sacrifice 96/384 density, sticky results, local-only guarantees, text status, keyboard operation, or reduced-motion fallback for visual consistency.

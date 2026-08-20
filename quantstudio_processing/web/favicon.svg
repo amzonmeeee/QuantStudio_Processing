@@ -4,6 +4,12 @@
     .plate { fill: #005A9C; }
     .well { fill: #E7ECEF; }
     .focus { fill: #D64230; }
+    @media (prefers-color-scheme: dark) {
+      .background { fill: #10171C; }
+      .plate { fill: #0B639F; }
+      .well { fill: #F0F4F7; }
+      .focus { fill: #FF765E; }
+    }
   </style>
   <rect class="background" width="32" height="32"/>
   <path class="plate" d="M4 8 8 4h20v24H4Z"/>

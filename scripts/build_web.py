@@ -23,6 +23,7 @@ WEB_FILES = (
     "index.html",
     "pyodide-client.js",
     "pyodide-worker.js",
+    "theme-init.js",
 )
 
 PYTHON_MODULES = (

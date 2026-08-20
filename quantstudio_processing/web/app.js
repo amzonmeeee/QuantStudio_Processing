@@ -20,6 +20,133 @@ const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.s
 const FORMATS = { 96: { rows: 8, cols: 12 }, 384: { rows: 16, cols: 24 } };
 const COARSE_POINTER = matchMedia('(pointer: coarse)').matches;
 const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)');
+const SYSTEM_THEME = matchMedia('(prefers-color-scheme: dark)');
+const THEME_MODES = ['system', 'light', 'dark'];
+const EDITION_TRANSITION_TIMEOUT = 850;
+
+let currentTheme = THEME_MODES.includes(document.documentElement.dataset.themePreference)
+  ? document.documentElement.dataset.themePreference
+  : 'system';
+let activeThemeTransition = null;
+let fallbackThemeTimer = 0;
+
+function effectiveTheme(theme) {
+  return theme === 'system' ? (SYSTEM_THEME.matches ? 'dark' : 'light') : theme;
+}
+
+function updateThemeControl() {
+  $$('[data-theme-choice]').forEach(button => {
+    const active = button.dataset.themeChoice === currentTheme;
+    button.classList.toggle('active', active);
+    button.setAttribute('aria-pressed', String(active));
+  });
+}
+
+function setThemeLoading(loading) {
+  const control = $('.theme-control');
+  if (loading) control?.setAttribute('aria-busy', 'true');
+  else control?.removeAttribute('aria-busy');
+}
+
+function applyTheme(theme, persist = true) {
+  currentTheme = THEME_MODES.includes(theme) ? theme : 'system';
+  const root = document.documentElement;
+  root.dataset.themePreference = currentTheme;
+  if (currentTheme === 'system') delete root.dataset.theme;
+  else root.dataset.theme = currentTheme;
+
+  const themeColor = $('#theme-color');
+  if (themeColor) {
+    themeColor.content = effectiveTheme(currentTheme) === 'dark'
+      ? (themeColor.dataset.dark || '#10171C')
+      : (themeColor.dataset.light || '#E7ECEF');
+  }
+
+  if (persist) {
+    try {
+      if (currentTheme === 'system') localStorage.removeItem('theme');
+      else localStorage.setItem('theme', currentTheme);
+    } catch (_) {
+      /* The selected theme still applies to this page view. */
+    }
+  }
+  updateThemeControl();
+}
+
+function stopThemeTransition() {
+  if (activeThemeTransition) {
+    activeThemeTransition.skipTransition();
+    activeThemeTransition = null;
+  }
+  if (fallbackThemeTimer) {
+    clearTimeout(fallbackThemeTimer);
+    fallbackThemeTimer = 0;
+  }
+  document.documentElement.classList.remove(
+    'theme-transitioning', 'theme-fallback-transitioning',
+  );
+  setThemeLoading(false);
+}
+
+function transitionTheme(theme, persist = true) {
+  const nextTheme = THEME_MODES.includes(theme) ? theme : 'system';
+  if (nextTheme === currentTheme) return;
+
+  const changesAppearance = effectiveTheme(nextTheme) !== effectiveTheme(currentTheme);
+  if (!changesAppearance || REDUCED_MOTION.matches) {
+    stopThemeTransition();
+    applyTheme(nextTheme, persist);
+    return;
+  }
+
+  stopThemeTransition();
+  const root = document.documentElement;
+  if (typeof document.startViewTransition !== 'function') {
+    root.classList.add('theme-fallback-transitioning');
+    setThemeLoading(true);
+    void root.offsetWidth;
+    applyTheme(nextTheme, persist);
+    fallbackThemeTimer = setTimeout(() => {
+      fallbackThemeTimer = 0;
+      root.classList.remove('theme-fallback-transitioning');
+      setThemeLoading(false);
+    }, EDITION_TRANSITION_TIMEOUT);
+    return;
+  }
+
+  root.classList.add('theme-transitioning');
+  setThemeLoading(true);
+  let transition;
+  try {
+    transition = document.startViewTransition(() => applyTheme(nextTheme, persist));
+  } catch (_) {
+    root.classList.remove('theme-transitioning');
+    setThemeLoading(false);
+    applyTheme(nextTheme, persist);
+    return;
+  }
+  activeThemeTransition = transition;
+  transition.ready?.catch?.(() => {});
+  const cleanUp = () => {
+    if (activeThemeTransition !== transition) return;
+    activeThemeTransition = null;
+    root.classList.remove('theme-transitioning');
+    setThemeLoading(false);
+  };
+  transition.finished.then(cleanUp, cleanUp);
+}
+
+$$('[data-theme-choice]').forEach(button => {
+  button.addEventListener('click', () => transitionTheme(button.dataset.themeChoice));
+});
+
+function handleSystemThemeChange() {
+  if (currentTheme === 'system') applyTheme('system', false);
+}
+
+if (SYSTEM_THEME.addEventListener) SYSTEM_THEME.addEventListener('change', handleSystemThemeChange);
+else SYSTEM_THEME.addListener(handleSystemThemeChange);
+updateThemeControl();
 
 const state = {
   loaded: false, loading: false, runtimeReady: false, sourceFile: null,
@@ -43,6 +170,7 @@ let fieldEditor = null;
 let valueEditor = null;
 let resultTableObserver = null;
 let scrollLensFrame = 0;
+let analysisRevision = 0;
 const scrollLensSyncers = [];
 const scrollLensObservers = [];
 
@@ -113,7 +241,9 @@ async function withPending(
     const held = shown ? performance.now() - shown : SPIN_MIN;
     setTimeout(() => {
       spinEl.hidden = true;
-      labelEl.textContent = doneText ?? idle;
+      labelEl.textContent = typeof doneText === 'function'
+        ? doneText()
+        : (doneText ?? idle);
       btn.disabled = !canEnable();
     }, Math.max(0, SPIN_MIN - held));
   }
@@ -192,12 +322,15 @@ function clearResults(message = 'Results appear here once you run the analysis.'
 }
 
 function invalidateAnalysis() {
+  analysisRevision += 1;
   if (!state.results) return;
-  clearResults('The plate design changed. Run the analysis again to refresh these results.');
+  clearResults('The plate or analysis settings changed. Run again to refresh these results.');
+  paintAll();
   $('#runLabel').textContent = 'Run analysis';
 }
 
 function clearLoadedUi() {
+  analysisRevision += 1;
   state.loaded = false;
   state.sourceFile = null;
   state.filename = null;
@@ -282,11 +415,15 @@ $('#btnRuntimeRetry').onclick = () => { void prepareRuntime({ restart: true }); 
 $('#btnPlateRetry').onclick = () => { void prepareRuntime({ restart: true }); };
 $('#btnFilePicker').onclick = () => $('#fileInput').click();
 
+let replaceCloseTimer = null;
+
 function closeReplaceConfirm({ restoreFocus = false } = {}) {
   const confirm = $('#replaceConfirm');
   if (confirm.hidden) return;
   delete confirm.dataset.open;
-  setTimeout(() => {
+  clearTimeout(replaceCloseTimer);
+  replaceCloseTimer = setTimeout(() => {
+    replaceCloseTimer = null;
     confirm.hidden = true;
     if (restoreFocus) $('#btnSelectAnother').focus();
   }, REDUCED_MOTION.matches ? 0 : 180);
@@ -294,6 +431,8 @@ function closeReplaceConfirm({ restoreFocus = false } = {}) {
 
 $('#btnSelectAnother').onclick = () => {
   const confirm = $('#replaceConfirm');
+  clearTimeout(replaceCloseTimer);
+  replaceCloseTimer = null;
   confirm.hidden = false;
   requestAnimationFrame(() => {
     confirm.dataset.open = '';
@@ -1323,6 +1462,7 @@ function renderGroupPicker() {
     button.onclick = () => {
       option.selected = !option.selected;
       state.groupCols = [...select.selectedOptions].map(item => item.value);
+      invalidateAnalysis();
       renderGroupPicker();
     };
     picker.append(button);
@@ -1334,19 +1474,80 @@ function fillSelect(sel, options, chosen) {
   if (options.includes(chosen)) sel.value = chosen;
 }
 
-$('#selAssay').onchange = e => { state.assayCol = e.target.value; syncSelects(); };
-$('#selQuantity').onchange = e => { state.quantityCol = e.target.value; };
+$('#selAssay').onchange = e => {
+  state.assayCol = e.target.value;
+  syncSelects();
+  invalidateAnalysis();
+};
+$('#selQuantity').onchange = e => {
+  state.quantityCol = e.target.value;
+  invalidateAnalysis();
+};
 $('#selGroup').onchange = e =>
   {
     state.groupCols = [...e.target.selectedOptions].map(o => o.value);
+    invalidateAnalysis();
     renderGroupPicker();
   };
-$('#selDctA').onchange = e => { state.dctA = e.target.value; };
-$('#selDctB').onchange = e => { state.dctB = e.target.value; };
+$('#selDctA').onchange = e => {
+  state.dctA = e.target.value;
+  invalidateAnalysis();
+};
+$('#selDctB').onchange = e => {
+  state.dctB = e.target.value;
+  invalidateAnalysis();
+};
 
 $('#optCurveBg').addEventListener('change', event => {
   $('#curveBgState').textContent = event.target.checked ? 'White' : 'Transparent';
   invalidateAnalysis();
+});
+
+const thresholdInputs = [
+  ['#optNtc', 'NTC margin'],
+  ['#optSd', 'Max Ct SD'],
+  ['#optCtMin', 'Min Ct'],
+];
+
+function clearThresholdError() {
+  const error = $('#thresholdError');
+  error.hidden = true;
+  error.textContent = '';
+  thresholdInputs.forEach(([selector]) => {
+    const input = $(selector);
+    input.removeAttribute('aria-invalid');
+    input.removeAttribute('aria-describedby');
+  });
+}
+
+function validateThresholds({ focus = false, reveal = false } = {}) {
+  clearThresholdError();
+  const invalidThreshold = thresholdInputs.find(([selector]) => {
+    const value = $(selector).valueAsNumber;
+    return !Number.isFinite(value) || value < 0;
+  });
+  if (!invalidThreshold) return '';
+
+  const [selector, label] = invalidThreshold;
+  const input = $(selector);
+  const message = `${label} must be a non-negative number.`;
+  if (reveal && $('#btnThresholds').getAttribute('aria-expanded') !== 'true') {
+    $('#btnThresholds').click();
+  }
+  input.setAttribute('aria-invalid', 'true');
+  input.setAttribute('aria-describedby', 'thresholdError');
+  const error = $('#thresholdError');
+  error.textContent = message;
+  error.hidden = false;
+  if (focus) input.focus();
+  return message;
+}
+
+thresholdInputs.forEach(([selector]) => {
+  $(selector).addEventListener('input', () => {
+    validateThresholds();
+    invalidateAnalysis();
+  });
 });
 
 $$('.seg-btn').forEach(b => {
@@ -1375,7 +1576,8 @@ $('#btnThresholds').onclick = () => {
 $('#btnRun').onclick = () => {
   const btn = $('#btnRun');
   void withPending(
-    btn, $('#runLabel'), $('#runSpin'), 'Running', 'Run again', runAnalysis,
+    btn, $('#runLabel'), $('#runSpin'), 'Running',
+    () => state.results ? 'Run again' : 'Run analysis', runAnalysis,
     () => state.loaded && state.runtimeReady,
   ).catch(error => {
     const message = messageFor(error);
@@ -1396,37 +1598,8 @@ async function runAnalysis() {
   }
   const dctA = $('#selDctA').value, dctB = $('#selDctB').value;
 
-  const thresholdError = $('#thresholdError');
-  const thresholdInputs = [
-    ['#optNtc', 'NTC margin'],
-    ['#optSd', 'Max Ct SD'],
-    ['#optCtMin', 'Min Ct'],
-  ];
-  thresholdError.hidden = true;
-  thresholdError.textContent = '';
-  thresholdInputs.forEach(([selector]) => {
-    const input = $(selector);
-    input.removeAttribute('aria-invalid');
-    input.removeAttribute('aria-describedby');
-  });
-  const invalidThreshold = thresholdInputs.find(([selector]) => {
-    const value = $(selector).valueAsNumber;
-    return !Number.isFinite(value) || value < 0;
-  });
-  if (invalidThreshold) {
-    const [selector, label] = invalidThreshold;
-    const input = $(selector);
-    if ($('#btnThresholds').getAttribute('aria-expanded') !== 'true') {
-      $('#btnThresholds').click();
-    }
-    const message = `${label} must be a non-negative number.`;
-    input.setAttribute('aria-invalid', 'true');
-    input.setAttribute('aria-describedby', 'thresholdError');
-    thresholdError.textContent = message;
-    thresholdError.hidden = false;
-    input.focus();
-    throw new Error(message);
-  }
+  const thresholdMessage = validateThresholds({ focus: true, reveal: true });
+  if (thresholdMessage) throw new Error(thresholdMessage);
 
   const options = {
     ntc_margin: $('#optNtc').valueAsNumber,
@@ -1443,11 +1616,19 @@ async function runAnalysis() {
     dct: dctA !== '(none)' && dctB !== '(none)' ? [dctA, dctB] : null,
     options,
   };
+  const runRevision = analysisRevision;
 
   clearResults();
   paintAll();
   showSkeleton();
   const d = await localBackend.analyze(body);
+  if (runRevision !== analysisRevision) {
+    const message = 'The plate or analysis settings changed while this run was in progress. Run again to refresh the results.';
+    clearResults(message);
+    paintAll();
+    setStatus(message);
+    return false;
+  }
 
   for (const [name, bytes] of Object.entries(d.plots || {})) {
     const blob = new Blob([bytes], { type: 'image/png' });

@@ -3,9 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="theme-color" content="#E7ECEF">
+<meta name="color-scheme" content="light dark">
+<meta id="theme-color" name="theme-color" content="#E7ECEF" media="(prefers-color-scheme: light)" data-light="#E7ECEF" data-dark="#10171C">
+<meta id="theme-color-system-dark" name="theme-color" content="#10171C" media="(prefers-color-scheme: dark)">
 <meta name="description" content="A local-first qPCR workspace for QuantStudio exports, plate maps, QC and plots.">
 <title>QuantStudio Processing — Jensen Luo</title>
+<script src="theme-init.js"></script>
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="app.css">
 </head>
@@ -21,55 +24,71 @@ FINISH: unreviewed and undocumented is unfinished; this build ends with the fini
 <a class="skip-link" href="#workspace">Skip to workspace</a>
 
 <header class="bar">
-  <div class="brand-lockup">
-    <a class="brand" href="https://jensen-l.com" rel="author">Jensen Luo</a>
-    <span class="brand-divider" aria-hidden="true">/</span>
-    <span class="wordmark">QuantStudio_Processing</span>
-  </div>
-
-  <div class="bar-file" id="fileChip" hidden>
-    <span class="chip-name" id="chipName"></span>
-    <span class="chip-meta" id="chipMeta"></span>
-  </div>
-
-  <div class="runtime-cluster">
-    <span class="local-badge" title="Analysis stays on this device">
-      <span class="local-dot" aria-hidden="true"></span>
-      Local only
-    </span>
-    <div class="runtime-state" id="runtimeState" data-state="loading" role="status" aria-live="polite">
-      <span class="runtime-dot" aria-hidden="true"></span>
-      <span id="runtimeText">Starting analyzer…</span>
-      <button class="btn btn-mini" id="btnRuntimeRetry" type="button" hidden>Retry</button>
+  <div class="bar-primary">
+    <div class="brand-lockup">
+      <a class="brand" href="https://jensen-l.com" rel="author">Jensen Luo</a>
+      <span class="brand-divider" aria-hidden="true">/</span>
+      <span class="wordmark">QuantStudio_Processing</span>
     </div>
-  </div>
 
-  <div class="bar-actions" aria-label="Workbook actions">
-    <div class="replace-workbook">
-      <button class="btn btn-quiet" id="btnSelectAnother" type="button">Select another plate</button>
-      <div class="replace-confirm" id="replaceConfirm" role="dialog" aria-modal="false"
-           aria-labelledby="replaceConfirmTitle" aria-describedby="replaceConfirmText" hidden>
-        <div>
-          <strong id="replaceConfirmTitle">Replace this plate?</strong>
-          <span id="replaceConfirmText">Unsaved plate edits and results will be discarded.</span>
-        </div>
-        <div class="replace-confirm-actions">
-          <button class="btn btn-mini btn-danger" id="btnReplaceConfirm" type="button">Choose file</button>
-          <button class="btn btn-mini btn-quiet" id="btnReplaceCancel" type="button">Keep current</button>
-        </div>
+    <div class="runtime-cluster">
+      <span class="local-badge" title="Analysis stays on this device">
+        <span class="local-dot" aria-hidden="true"></span>
+        Local only
+      </span>
+      <div class="runtime-state" id="runtimeState" data-state="loading" role="status" aria-live="polite">
+        <span class="runtime-dot" aria-hidden="true"></span>
+        <span id="runtimeText">Starting analyzer…</span>
+        <button class="btn btn-mini" id="btnRuntimeRetry" type="button" hidden>Retry</button>
       </div>
     </div>
-    <button class="btn" id="btnYaml" disabled>Copy platemap</button>
-    <button class="btn reserve" id="btnDownload" disabled
-            data-states="Download workbook|Preparing download">
-      <span class="btn-label" id="downloadLabel">Download workbook</span>
-      <span class="spinner spinner-dark" id="downloadSpin" hidden aria-hidden="true"></span>
-    </button>
-    <button class="btn btn-primary reserve" id="btnRun" disabled
-            data-states="Run analysis|Running|Run again">
-      <span class="btn-label" id="runLabel">Run analysis</span>
-      <span class="spinner" id="runSpin" hidden aria-hidden="true"></span>
-    </button>
+
+    <div class="theme-control" role="group" aria-label="Color mode">
+      <button class="theme-option active" type="button" data-theme-choice="system" aria-pressed="true" aria-label="Use system color mode" title="System mode">
+        <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="12"></rect><path d="M8.5 20h7M12 16.5V20"></path></svg>
+      </button>
+      <button class="theme-option" type="button" data-theme-choice="light" aria-pressed="false" aria-label="Use light color mode" title="Light mode">
+        <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><circle cx="12" cy="12" r="3.5"></circle><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M18.7 5.3l-1.4 1.4M6.7 17.3l-1.4 1.4"></path></svg>
+      </button>
+      <button class="theme-option" type="button" data-theme-choice="dark" aria-pressed="false" aria-label="Use dark color mode" title="Dark mode">
+        <svg viewBox="0 0 24 24" focusable="false" aria-hidden="true"><path d="M20 15.2A8.5 8.5 0 0 1 8.8 4a8.5 8.5 0 1 0 11.2 11.2Z"></path></svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="bar-workbook">
+    <div class="bar-file" id="fileChip" hidden>
+      <span class="chip-name" id="chipName"></span>
+      <span class="chip-meta" id="chipMeta"></span>
+    </div>
+
+    <div class="bar-actions" aria-label="Workbook actions">
+      <div class="replace-workbook">
+        <button class="btn btn-quiet" id="btnSelectAnother" type="button">Select another plate</button>
+        <div class="replace-confirm" id="replaceConfirm" role="dialog" aria-modal="false"
+             aria-labelledby="replaceConfirmTitle" aria-describedby="replaceConfirmText" hidden>
+          <div>
+            <strong id="replaceConfirmTitle">Replace this plate?</strong>
+            <span id="replaceConfirmText">Unsaved plate edits and results will be discarded.</span>
+          </div>
+          <div class="replace-confirm-actions">
+            <button class="btn btn-mini btn-danger" id="btnReplaceConfirm" type="button">Choose file</button>
+            <button class="btn btn-mini btn-quiet" id="btnReplaceCancel" type="button">Keep current</button>
+          </div>
+        </div>
+      </div>
+      <button class="btn" id="btnYaml" disabled>Copy platemap</button>
+      <button class="btn reserve" id="btnDownload" disabled
+              data-states="Download workbook|Preparing download">
+        <span class="btn-label" id="downloadLabel">Download workbook</span>
+        <span class="spinner spinner-dark" id="downloadSpin" hidden aria-hidden="true"></span>
+      </button>
+      <button class="btn btn-primary reserve" id="btnRun" disabled
+              data-states="Run analysis|Running|Run again">
+        <span class="btn-label" id="runLabel">Run analysis</span>
+        <span class="spinner" id="runSpin" hidden aria-hidden="true"></span>
+      </button>
+    </div>
   </div>
 </header>
 
