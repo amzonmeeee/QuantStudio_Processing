@@ -1637,6 +1637,7 @@ async function runAnalysis() {
     state.plotBlobs.set(name, blob);
     d.plots[name] = url;
   }
+  d.curveBackground = options.curve_background ? 'white' : 'transparent';
 
   state.results = d;
   state.flags = new Map();
@@ -1681,8 +1682,8 @@ const TAB_LABEL = {
 };
 
 const PLOT_META = {
-  amplification: { label: 'Amplification curves', suffix: 'amplification' },
-  melt: { label: 'Melt curves', suffix: 'melt' },
+  amplification: { label: 'Amplification curves', suffix: 'amplification', curve: true },
+  melt: { label: 'Melt curves', suffix: 'melt', curve: true },
   plate: { label: 'Ct plate heatmap', suffix: 'plate_ct' },
 };
 
@@ -1825,6 +1826,7 @@ function renderResults() {
 
     for (const [name, src] of plotEntries) {
       const meta = plotMeta(name);
+      const exportBackground = meta.curve ? d.curveBackground : 'white';
       const heading = el('span', { class: 'plot-name', textContent: meta.label });
       const downloadPng = el('button', {
         class: 'btn plot-download-png',
@@ -1895,12 +1897,15 @@ function renderResults() {
       actions.append(downloadPng, downloadSvg);
       const caption = el('figcaption', { class: 'plot-head' });
       caption.append(heading, actions);
-      const figure = el('figure', { class: 'plot' });
+      const figure = el('figure', {
+        class: 'plot',
+        dataset: { exportBackground },
+      });
       figure.append(
         caption,
         el('img', {
           src,
-          alt: `${meta.label} generated from the current analysis`,
+          alt: `${meta.label} generated from the current analysis with a ${exportBackground} background`,
         }),
       );
       wrap.append(figure);

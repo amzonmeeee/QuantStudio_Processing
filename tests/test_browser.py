@@ -92,19 +92,29 @@ def test_static_frontend_uses_the_local_worker_instead_of_http_apis():
     assert "Local analyzer ready. Your workbook never leaves this browser." not in worker_source
     assert "Starting analyzer…" in index_source
     assert "runtimeStatusLabel" in app_source
+    assert "Local only" not in index_source
+    assert "local-badge" not in index_source
+    assert ".local-badge" not in app_css
+    assert ".local-dot" not in app_css
     assert "data-scroll-lens" in index_source
     assert "scroll-cue" in app_css
     assert "progressive-blur" not in app_css
     assert "syncScrollLens" in app_source
     assert 'id="optCurveBg"' in index_source
     assert "curve_background: $('#optCurveBg').checked" in app_source
+    assert "dataset: { exportBackground }" in app_source
+    assert '.plot[data-export-background="transparent"] img' in app_css
     assert "table-sticky-head" in app_source
     assert "table-sticky-head" in app_css
     assert "overflow-y: clip" in app_css
     tabs_css = app_css.split(".tabs-result {", 1)[1].split("}", 1)[0]
     cue_css = app_css.split(".scroll-cue {", 1)[1].split("}", 1)[0]
+    viewport_css = app_css.split(".scroll-lens-viewport {", 1)[1].split("}", 1)[0]
     assert "overflow-y: hidden" in tabs_css
     assert "right: 0" in cue_css
+    assert "width: calc(100% + 12px)" in viewport_css
+    assert "margin: -6px" in viewport_css
+    assert "padding: 6px" in viewport_css
     assert ".results-heading p { max-width: none;" in app_css
     assert "max-height: min(68vh" not in app_css
     assert ".result-body { min-height: 180px; overflow: visible;" in app_css

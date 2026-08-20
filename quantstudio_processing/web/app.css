@@ -43,6 +43,8 @@
   --flag-hover: #e5b2ad;
   --plot-paper: #f2f5f6;
   --plot-line: rgba(17, 25, 31, .2);
+  --alpha-preview-a: #f2f5f6;
+  --alpha-preview-b: #d8e0e5;
 
   --dye-1: #19769d;
   --dye-2: #4f7d35;
@@ -346,26 +348,9 @@ html.theme-fallback-transitioning .toast {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  gap: 10px;
   min-width: 0;
   max-width: min(52ch, 52vw);
 }
-
-.local-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  min-height: 28px;
-  padding: 0 9px;
-  border: 1px solid var(--line);
-  border-radius: 0;
-  background: var(--paper-alt);
-  color: var(--ink);
-  font-size: .7rem;
-  font-weight: 700;
-  white-space: nowrap;
-}
-.local-dot { display: block; width: 7px; height: 7px; background: var(--lapis); }
 
 .runtime-state {
   display: flex;
@@ -1048,6 +1033,9 @@ input[aria-invalid="true"] { border-color: var(--flag); }
   isolation: isolate;
 }
 .scroll-lens-viewport {
+  width: calc(100% + 12px);
+  margin: -6px;
+  padding: 6px;
   min-width: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -1323,6 +1311,15 @@ td.flagcell { color: var(--flag); }
   border: 1px solid var(--plot-line);
   background: var(--plot-paper);
   color-scheme: light;
+}
+.plot[data-export-background="transparent"] img {
+  background:
+    conic-gradient(
+      var(--alpha-preview-b) 25%,
+      var(--alpha-preview-a) 0 50%,
+      var(--alpha-preview-b) 0 75%,
+      var(--alpha-preview-a) 0
+    ) 0 0 / 16px 16px;
 }
 
 /* Well detail and feedback */
